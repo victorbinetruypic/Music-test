@@ -7,6 +7,8 @@ import { Card } from '@/components/ui/card'
 import { initiateOAuthFlow } from '@/lib/spotify'
 import { useAuthStore } from '@/stores/authStore'
 import { useSpotifyClient } from '@/hooks/useSpotifyClient'
+import { JourneyConfig } from '@/components/features/JourneyConfig'
+import type { Journey } from '@/types'
 
 function LandingView(): React.ReactElement {
   const isLoggingIn = useAuthStore((s) => s.isLoggingIn)
@@ -131,6 +133,40 @@ function AuthenticatedView(): React.ReactElement {
   const MIN_SONGS_FOR_JOURNEYS = 50
   const hasEnoughSongs = user?.likedSongsCount !== null && user?.likedSongsCount !== undefined && user.likedSongsCount >= MIN_SONGS_FOR_JOURNEYS
 
+  const handleJourneyReady = (journey: Journey): void => {
+    // For now, just log - playback will be implemented in Epic 3
+    console.log('Journey ready:', journey)
+  }
+
+  // Show journey configuration when library is ready
+  if (hasEnoughSongs && user?.likedSongsCount) {
+    return (
+      <div className="min-h-screen p-4">
+        <div className="mx-auto max-w-2xl">
+          {/* Header */}
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold">Create a Journey</h1>
+              <p className="text-sm text-muted-foreground">
+                {user.displayName} · {user.likedSongsCount.toLocaleString()} songs
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={logout}>
+              Disconnect
+            </Button>
+          </div>
+
+          {/* Journey Configuration */}
+          <JourneyConfig
+            likedSongsCount={user.likedSongsCount}
+            onJourneyReady={handleJourneyReady}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // Show library status for users without enough songs
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-4">
       <Card className="max-w-md p-6 text-center">
@@ -153,37 +189,21 @@ function AuthenticatedView(): React.ReactElement {
         )}
 
         {/* Library Requirements Status */}
-        {user?.likedSongsCount !== null && (
-          <div className="mb-6">
-            {hasEnoughSongs ? (
-              <div className="rounded-lg bg-green-50 p-4 dark:bg-green-950/30">
-                <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
-                  <CheckIcon />
-                  <span className="font-medium">Your library is ready!</span>
-                </div>
-                <p className="mt-1 text-sm text-green-600 dark:text-green-500">
-                  You have enough songs to create amazing journeys.
-                </p>
-              </div>
-            ) : (
-              <div className="rounded-lg bg-amber-50 p-4 dark:bg-amber-950/30">
-                <div className="flex items-center justify-center gap-2 text-amber-700 dark:text-amber-400">
-                  <InfoIcon />
-                  <span className="font-medium">Add more liked songs</span>
-                </div>
-                <p className="mt-1 text-sm text-amber-600 dark:text-amber-500">
-                  For the best experience, like at least {MIN_SONGS_FOR_JOURNEYS} songs on Spotify.
-                  You have {user?.likedSongsCount ?? 0} so far.
-                </p>
-              </div>
-            )}
+        <div className="mb-6">
+          <div className="rounded-lg bg-amber-50 p-4 dark:bg-amber-950/30">
+            <div className="flex items-center justify-center gap-2 text-amber-700 dark:text-amber-400">
+              <InfoIcon />
+              <span className="font-medium">Add more liked songs</span>
+            </div>
+            <p className="mt-1 text-sm text-amber-600 dark:text-amber-500">
+              For the best experience, like at least {MIN_SONGS_FOR_JOURNEYS} songs on Spotify.
+              You have {user?.likedSongsCount ?? 0} so far.
+            </p>
           </div>
-        )}
+        </div>
 
         <p className="mb-6 text-muted-foreground">
-          {hasEnoughSongs
-            ? 'Journey configuration coming soon.'
-            : 'You can still explore, but journeys work best with more variety.'}
+          You can still explore, but journeys work best with more variety.
         </p>
         <Button variant="outline" onClick={logout} size="sm">
           Disconnect
