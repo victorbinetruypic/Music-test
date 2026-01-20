@@ -1,9 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'export',
+  // Note: Removed 'output: export' to support /api/callback serverless function
+  // Vercel will still optimize static pages automatically
   images: {
-    unoptimized: true, // Required for static export
+    unoptimized: true,
   },
 };
 
