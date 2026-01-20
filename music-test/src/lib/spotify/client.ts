@@ -33,8 +33,11 @@ export class RealSpotifyClient implements SpotifyClient {
 
   private async fetch<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retryCount: number = 0
   ): Promise<{ data: T | null; error: string | null }> {
+    const MAX_RETRIES = 1 // Only retry once after token refresh
+
     try {
       const response = await fetch(`${SPOTIFY_API_BASE}${endpoint}`, {
         ...options,
@@ -46,13 +49,13 @@ export class RealSpotifyClient implements SpotifyClient {
       })
 
       if (response.status === 401) {
-        // Token expired, try to refresh
-        if (this.onTokenExpired) {
+        // Token expired, try to refresh (but only once to prevent infinite recursion)
+        if (this.onTokenExpired && retryCount < MAX_RETRIES) {
           const newToken = await this.onTokenExpired()
           if (newToken) {
             this.accessToken = newToken
-            // Retry the request
-            return this.fetch(endpoint, options)
+            // Retry the request with incremented retry count
+            return this.fetch(endpoint, options, retryCount + 1)
           }
         }
         return { data: null, error: 'Your session has expired. Please reconnect.' }

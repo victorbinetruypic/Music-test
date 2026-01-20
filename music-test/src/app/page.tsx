@@ -8,7 +8,11 @@ import { initiateOAuthFlow } from '@/lib/spotify'
 import { useAuthStore } from '@/stores/authStore'
 import { useSpotifyClient } from '@/hooks/useSpotifyClient'
 import { JourneyConfig } from '@/components/features/JourneyConfig'
+import { PlaybackView } from '@/components/features/PlaybackView'
+import { useJourneyStore } from '@/stores/journeyStore'
 import type { Journey } from '@/types'
+
+type ViewState = 'config' | 'playback'
 
 function LandingView(): React.ReactElement {
   const isLoggingIn = useAuthStore((s) => s.isLoggingIn)
@@ -60,8 +64,22 @@ function AuthenticatedView(): React.ReactElement {
   const logout = useAuthStore((s) => s.logout)
   const error = useAuthStore((s) => s.error)
 
+  const clearJourney = useJourneyStore((s) => s.clearJourney)
+  const interruptedJourney = useJourneyStore((s) => s.interruptedJourney)
+  const loadInterruptedJourney = useJourneyStore((s) => s.loadInterruptedJourney)
+  const resumeJourney = useJourneyStore((s) => s.resumeJourney)
+  const clearInterruptedJourney = useJourneyStore((s) => s.clearInterruptedJourney)
+  const saveInterruptedJourney = useJourneyStore((s) => s.saveInterruptedJourney)
+  const currentJourney = useJourneyStore((s) => s.currentJourney)
+
   const spotifyClient = useSpotifyClient()
   const [isLoadingProfile, setIsLoadingProfile] = useState(false)
+  const [viewState, setViewState] = useState<ViewState>('config')
+
+  // Load interrupted journey on mount
+  useEffect(() => {
+    loadInterruptedJourney()
+  }, [loadInterruptedJourney])
 
   const fetchUserData = useCallback(async (): Promise<void> => {
     if (!spotifyClient || user) return
@@ -134,8 +152,42 @@ function AuthenticatedView(): React.ReactElement {
   const hasEnoughSongs = user?.likedSongsCount !== null && user?.likedSongsCount !== undefined && user.likedSongsCount >= MIN_SONGS_FOR_JOURNEYS
 
   const handleJourneyReady = (journey: Journey): void => {
-    // For now, just log - playback will be implemented in Epic 3
-    console.log('Journey ready:', journey)
+    setViewState('playback')
+  }
+
+  const handleExitPlayback = (): void => {
+    // Save current progress before exiting
+    saveInterruptedJourney()
+    clearJourney()
+    setViewState('config')
+  }
+
+  const handleJourneyComplete = (): void => {
+    // Journey completed - clear any saved interrupted state
+    clearInterruptedJourney()
+  }
+
+  const handleResumeJourney = (): void => {
+    resumeJourney()
+    setViewState('playback')
+  }
+
+  const handleDiscardInterrupted = (): void => {
+    clearInterruptedJourney()
+  }
+
+  // Show playback view
+  if (viewState === 'playback') {
+    return (
+      <div className="min-h-screen p-4">
+        <div className="mx-auto max-w-2xl">
+          <PlaybackView
+            onExit={handleExitPlayback}
+            onComplete={handleJourneyComplete}
+          />
+        </div>
+      </div>
+    )
   }
 
   // Show journey configuration when library is ready
@@ -155,6 +207,29 @@ function AuthenticatedView(): React.ReactElement {
               Disconnect
             </Button>
           </div>
+
+          {/* Resume Journey Banner */}
+          {interruptedJourney && (
+            <Card className="mb-6 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold">Resume Your Journey</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {interruptedJourney.journey.mood.charAt(0).toUpperCase() + interruptedJourney.journey.mood.slice(1)} ·
+                    Song {interruptedJourney.trackIndex + 1} of {interruptedJourney.journey.tracks.length}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleResumeJourney}>
+                    Resume
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={handleDiscardInterrupted}>
+                    Discard
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* Journey Configuration */}
           <JourneyConfig

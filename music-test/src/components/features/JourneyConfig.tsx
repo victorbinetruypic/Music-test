@@ -40,6 +40,7 @@ export function JourneyConfig({
   const setSelectedMood = useJourneyStore((s) => s.setSelectedMood)
   const setSelectedDuration = useJourneyStore((s) => s.setSelectedDuration)
   const setJourney = useJourneyStore((s) => s.setJourney)
+  const clearJourney = useJourneyStore((s) => s.clearJourney)
   const setIsGenerating = useJourneyStore((s) => s.setIsGenerating)
   const setError = useJourneyStore((s) => s.setError)
 
@@ -58,6 +59,8 @@ export function JourneyConfig({
   // Local state
   const [tracks, setTracks] = useState<Track[]>([])
   const [isLoadingTracks, setIsLoadingTracks] = useState(false)
+  const [isSavingPlaylist, setIsSavingPlaylist] = useState(false)
+  const [savedPlaylistUrl, setSavedPlaylistUrl] = useState<string | null>(null)
 
   // Load preferences on mount
   useEffect(() => {
@@ -177,6 +180,33 @@ export function JourneyConfig({
     }
   }, [selectedMood, selectedDuration, featuresProgress, tracks, exclusions, setIsGenerating, setError, setJourney, onJourneyReady])
 
+  // Save playlist to Spotify
+  const handleSavePlaylist = useCallback(async (): Promise<void> => {
+    if (!spotifyClient || !currentJourney) return
+
+    setIsSavingPlaylist(true)
+    setError(null)
+
+    try {
+      const moodLabel = currentJourney.mood.charAt(0).toUpperCase() + currentJourney.mood.slice(1)
+      const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      const playlistName = `${moodLabel} Journey - ${date}`
+      const trackUris = currentJourney.tracks.map((t) => t.uri)
+
+      const { data, error: saveError } = await spotifyClient.createPlaylist(playlistName, trackUris)
+
+      if (saveError) {
+        setError(saveError)
+      } else if (data) {
+        setSavedPlaylistUrl(data.external_urls.spotify)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save playlist')
+    } finally {
+      setIsSavingPlaylist(false)
+    }
+  }, [spotifyClient, currentJourney, setError])
+
   // Loading state
   if (isLoadingTracks || (featuresProgress && featuresProgress.phase === 'fetching')) {
     const progressPercent = featuresProgress
@@ -201,14 +231,63 @@ export function JourneyConfig({
     return (
       <div className="space-y-4">
         <ArcPreview journey={currentJourney} />
+
+        {/* Save confirmation */}
+        {savedPlaylistUrl && (
+          <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700 dark:bg-green-950/30 dark:text-green-400">
+            <div className="flex items-center gap-2">
+              <CheckIcon className="h-4 w-4" />
+              <span>Saved to Spotify!</span>
+              <a
+                href={savedPlaylistUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:no-underline ml-auto"
+              >
+                Open playlist
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Error display */}
+        {error && (
+          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-400">
+            {error}
+          </div>
+        )}
+
         <div className="flex gap-2">
           <Button onClick={() => onJourneyReady?.(currentJourney)} className="flex-1">
             Start Journey
           </Button>
-          <Button variant="outline" onClick={() => setJourney(null as unknown as Journey)}>
-            Change Settings
-          </Button>
+          {!savedPlaylistUrl && (
+            <Button
+              variant="outline"
+              onClick={handleSavePlaylist}
+              disabled={isSavingPlaylist}
+            >
+              {isSavingPlaylist ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
+                  Saving...
+                </>
+              ) : (
+                'Save to Spotify'
+              )}
+            </Button>
+          )}
         </div>
+        <Button
+          variant="ghost"
+          className="w-full"
+          onClick={() => {
+            clearJourney()
+            setSavedPlaylistUrl(null)
+          }}
+        >
+          Change Settings
+        </Button>
       </div>
     )
   }
@@ -258,5 +337,22 @@ export function JourneyConfig({
         </p>
       )}
     </div>
+  )
+}
+
+function CheckIcon({ className }: { className?: string }): React.ReactElement {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
   )
 }

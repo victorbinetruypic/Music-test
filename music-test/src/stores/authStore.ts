@@ -50,7 +50,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       tokens,
       user: currentData.user,
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(storageData))
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(storageData))
+    } catch {
+      // localStorage may be full or unavailable
+    }
 
     set({
       tokens,
@@ -66,7 +70,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       tokens: currentData.tokens,
       user,
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(storageData))
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(storageData))
+    } catch {
+      // localStorage may be full or unavailable
+    }
 
     set({ user })
   },
@@ -88,7 +96,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   logout: () => {
-    localStorage.removeItem(STORAGE_KEY)
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // localStorage may be unavailable
+    }
     set({
       tokens: null,
       user: null,

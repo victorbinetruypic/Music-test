@@ -2,6 +2,14 @@ import { create } from 'zustand'
 
 import type { Track, Mood, Duration, Phase, Journey, JourneyPhase } from '@/types'
 
+const INTERRUPTED_JOURNEY_KEY = 'music-test-interrupted-journey'
+
+interface InterruptedJourney {
+  journey: Journey
+  trackIndex: number
+  savedAt: string
+}
+
 interface JourneyStore {
   // State
   currentJourney: Journey | null
@@ -12,6 +20,7 @@ interface JourneyStore {
   isGenerating: boolean
   isSavingPlaylist: boolean
   error: string | null
+  interruptedJourney: InterruptedJourney | null
 
   // Actions
   setSelectedMood: (mood: Mood | null) => void
@@ -24,6 +33,10 @@ interface JourneyStore {
   setIsGenerating: (value: boolean) => void
   setIsSavingPlaylist: (value: boolean) => void
   setError: (message: string | null) => void
+  saveInterruptedJourney: () => void
+  loadInterruptedJourney: () => void
+  resumeJourney: () => void
+  clearInterruptedJourney: () => void
   reset: () => void
 }
 
@@ -36,6 +49,7 @@ const initialState = {
   isGenerating: false,
   isSavingPlaylist: false,
   error: null,
+  interruptedJourney: null,
 }
 
 export const useJourneyStore = create<JourneyStore>((set, get) => ({
@@ -106,6 +120,84 @@ export const useJourneyStore = create<JourneyStore>((set, get) => ({
 
   setError: (message) => {
     set({ error: message })
+  },
+
+  saveInterruptedJourney: () => {
+    const { currentJourney, currentTrackIndex } = get()
+    if (!currentJourney || currentTrackIndex >= currentJourney.tracks.length - 1) {
+      // Don't save if no journey or journey is complete
+      return
+    }
+
+    const interruptedData: InterruptedJourney = {
+      journey: currentJourney,
+      trackIndex: currentTrackIndex,
+      savedAt: new Date().toISOString(),
+    }
+
+    try {
+      localStorage.setItem(INTERRUPTED_JOURNEY_KEY, JSON.stringify(interruptedData))
+      set({ interruptedJourney: interruptedData })
+    } catch {
+      // localStorage might be full or unavailable
+      console.warn('Failed to save interrupted journey')
+    }
+  },
+
+  loadInterruptedJourney: () => {
+    try {
+      const stored = localStorage.getItem(INTERRUPTED_JOURNEY_KEY)
+      if (stored) {
+        const data = JSON.parse(stored) as InterruptedJourney
+        // Only load if saved within the last 24 hours
+        const savedAt = new Date(data.savedAt)
+        const now = new Date()
+        const hoursSinceSave = (now.getTime() - savedAt.getTime()) / (1000 * 60 * 60)
+
+        if (hoursSinceSave < 24) {
+          set({ interruptedJourney: data })
+        } else {
+          // Clear old interrupted journey
+          localStorage.removeItem(INTERRUPTED_JOURNEY_KEY)
+        }
+      }
+    } catch {
+      // Invalid JSON or other error
+      localStorage.removeItem(INTERRUPTED_JOURNEY_KEY)
+    }
+  },
+
+  resumeJourney: () => {
+    const { interruptedJourney } = get()
+    if (!interruptedJourney) return
+
+    // Restore the journey state
+    set({
+      currentJourney: interruptedJourney.journey,
+      currentTrackIndex: interruptedJourney.trackIndex,
+      selectedMood: interruptedJourney.journey.mood,
+      currentPhase: null, // Will be set by setCurrentTrackIndex
+      interruptedJourney: null,
+    })
+
+    // Update the phase
+    get().setCurrentTrackIndex(interruptedJourney.trackIndex)
+
+    // Clear from storage
+    try {
+      localStorage.removeItem(INTERRUPTED_JOURNEY_KEY)
+    } catch {
+      // localStorage may be unavailable
+    }
+  },
+
+  clearInterruptedJourney: () => {
+    try {
+      localStorage.removeItem(INTERRUPTED_JOURNEY_KEY)
+    } catch {
+      // localStorage may be unavailable
+    }
+    set({ interruptedJourney: null })
   },
 
   reset: () => {

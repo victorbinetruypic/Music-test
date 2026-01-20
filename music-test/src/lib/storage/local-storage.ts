@@ -31,7 +31,11 @@ export function addExclusion(trackId: string): void {
     trackIds: [...current, trackId],
     updatedAt: new Date().toISOString(),
   }
-  localStorage.setItem(STORAGE_KEYS.EXCLUSIONS, JSON.stringify(data))
+  try {
+    localStorage.setItem(STORAGE_KEYS.EXCLUSIONS, JSON.stringify(data))
+  } catch {
+    // localStorage may be full or unavailable
+  }
 }
 
 export function removeExclusion(trackId: string): void {
@@ -40,11 +44,19 @@ export function removeExclusion(trackId: string): void {
     trackIds: current.filter((id) => id !== trackId),
     updatedAt: new Date().toISOString(),
   }
-  localStorage.setItem(STORAGE_KEYS.EXCLUSIONS, JSON.stringify(data))
+  try {
+    localStorage.setItem(STORAGE_KEYS.EXCLUSIONS, JSON.stringify(data))
+  } catch {
+    // localStorage may be full or unavailable
+  }
 }
 
 export function clearExclusions(): void {
-  localStorage.removeItem(STORAGE_KEYS.EXCLUSIONS)
+  try {
+    localStorage.removeItem(STORAGE_KEYS.EXCLUSIONS)
+  } catch {
+    // localStorage may be unavailable
+  }
 }
 
 // User Preferences
@@ -77,11 +89,19 @@ export function savePreferences(prefs: Partial<UserPreferences>): void {
     ...prefs,
     updatedAt: new Date().toISOString(),
   }
-  localStorage.setItem(STORAGE_KEYS.PREFERENCES, JSON.stringify(updated))
+  try {
+    localStorage.setItem(STORAGE_KEYS.PREFERENCES, JSON.stringify(updated))
+  } catch {
+    // localStorage may be full or unavailable
+  }
 }
 
 export function clearPreferences(): void {
-  localStorage.removeItem(STORAGE_KEYS.PREFERENCES)
+  try {
+    localStorage.removeItem(STORAGE_KEYS.PREFERENCES)
+  } catch {
+    // localStorage may be unavailable
+  }
 }
 
 // Skip Data (for learning algorithm)
@@ -114,7 +134,11 @@ export function addSkipEntry(entry: SkipEntry): void {
     entries: [...current, entry],
     updatedAt: new Date().toISOString(),
   }
-  localStorage.setItem(STORAGE_KEYS.SKIP_DATA, JSON.stringify(data))
+  try {
+    localStorage.setItem(STORAGE_KEYS.SKIP_DATA, JSON.stringify(data))
+  } catch {
+    // localStorage may be full or unavailable
+  }
 }
 
 export function getSkipCountForTrack(trackId: string): number {
@@ -134,5 +158,9 @@ export function getRecentSkipCount(trackId: string, journeyCount: number = 5): n
 }
 
 export function clearSkipData(): void {
-  localStorage.removeItem(STORAGE_KEYS.SKIP_DATA)
+  try {
+    localStorage.removeItem(STORAGE_KEYS.SKIP_DATA)
+  } catch {
+    // localStorage may be unavailable
+  }
 }
