@@ -39,8 +39,8 @@ export function generateJourney(input: GenerationInput): GenerationResult {
     const count = phaseCounts.get(index) || 1
     const startIndex = allTracks.length
 
-    // Sequence tracks for this phase
-    const phaseTracks = sequenceTracksForPhase(trackPool, phaseDef, count)
+    // Sequence tracks for this phase (with skip penalties for frequency reduction)
+    const phaseTracks = sequenceTracksForPhase(trackPool, phaseDef, count, input.skipPenalties)
     allTracks.push(...phaseTracks)
 
     // Remove used tracks from pool

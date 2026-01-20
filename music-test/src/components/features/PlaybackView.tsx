@@ -33,9 +33,40 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
     playJourney,
     togglePlayback,
     skip,
+    markNotThis,
     seekTo,
     changeVolume,
   } = usePlayer()
+
+  // "Not This" confirmation state
+  const [showNotThisConfirm, setShowNotThisConfirm] = useState(false)
+  const notThisTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Handle "Not This" action
+  const handleNotThis = useCallback(async () => {
+    await markNotThis()
+    setShowNotThisConfirm(true)
+
+    // Clear any existing timeout
+    if (notThisTimeoutRef.current) {
+      clearTimeout(notThisTimeoutRef.current)
+    }
+
+    // Auto-hide confirmation after 2 seconds
+    notThisTimeoutRef.current = setTimeout(() => {
+      setShowNotThisConfirm(false)
+      notThisTimeoutRef.current = null
+    }, 2000)
+  }, [markNotThis])
+
+  // Cleanup "Not This" timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (notThisTimeoutRef.current) {
+        clearTimeout(notThisTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const currentTrack = getCurrentTrack(currentJourney, currentTrackIndex)
 
@@ -215,6 +246,15 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
   // Active playback view
   return (
     <div className="space-y-4">
+      {/* "Not This" confirmation toast */}
+      {showNotThisConfirm && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="rounded-lg bg-foreground text-background px-4 py-2 text-sm font-medium shadow-lg">
+            Got it, removed from future journeys
+          </div>
+        </div>
+      )}
+
       {/* Arc progress */}
       {currentJourney && (
         <ArcVisualizationCompact journey={currentJourney} currentTrackIndex={currentTrackIndex} />
@@ -266,6 +306,19 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
           </Button>
           <Button variant="ghost" size="icon" onClick={skip} className="h-10 w-10">
             <SkipIcon className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* Secondary actions: Not This */}
+        <div className="flex justify-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleNotThis}
+            className="text-xs text-muted-foreground hover:text-destructive"
+          >
+            <BanIcon className="h-3 w-3 mr-1" />
+            Not This
           </Button>
         </div>
 
@@ -384,6 +437,24 @@ function CheckIcon({ className }: { className?: string }): React.ReactElement {
       aria-hidden="true"
     >
       <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+}
+
+function BanIcon({ className }: { className?: string }): React.ReactElement {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
     </svg>
   )
 }

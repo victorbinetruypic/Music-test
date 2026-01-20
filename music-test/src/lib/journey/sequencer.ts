@@ -4,11 +4,13 @@ import { getTargetEnergy } from './templates'
 
 /**
  * Sequence tracks within a phase based on energy progression
+ * Optionally deprioritizes tracks with high skip penalties
  */
 export function sequenceTracksForPhase(
   tracks: TrackWithFeatures[],
   phase: PhaseDefinition,
-  count: number
+  count: number,
+  skipPenalties?: Map<string, number>
 ): Track[] {
   if (tracks.length === 0) return []
   if (count === 0) return []
@@ -20,13 +22,35 @@ export function sequenceTracksForPhase(
   const [minEnergy, maxEnergy] = phase.energyRange
   const midEnergy = (minEnergy + maxEnergy) / 2
 
-  const scoredTracks = tracks.map((t) => ({
-    track: t,
-    energyFit: 1 - Math.abs(t.features.energy - midEnergy),
-    energy: t.features.energy,
-  }))
+  const scoredTracks = tracks.map((t) => {
+    const energyFit = 1 - Math.abs(t.features.energy - midEnergy)
 
-  // Select tracks that fit the phase
+    // Apply penalty from skip data (Story 4.4)
+    // penaltyScore >= 3: deprioritized (selected last)
+    // penaltyScore >= 5: soft-excluded (only if no alternatives)
+    const penalty = skipPenalties?.get(t.track.id) ?? 0
+    let adjustedScore = energyFit
+
+    if (penalty >= 5) {
+      // Soft-excluded: very low priority
+      adjustedScore -= 2
+    } else if (penalty >= 3) {
+      // Deprioritized: lower priority
+      adjustedScore -= 1
+    } else if (penalty > 0) {
+      // Slight penalty for any skips
+      adjustedScore -= penalty * 0.1
+    }
+
+    return {
+      track: t,
+      energyFit: adjustedScore,
+      energy: t.features.energy,
+      penalty,
+    }
+  })
+
+  // Select tracks that fit the phase (higher score = better fit)
   scoredTracks.sort((a, b) => b.energyFit - a.energyFit)
   const selectedTracks = scoredTracks.slice(0, targetCount)
 

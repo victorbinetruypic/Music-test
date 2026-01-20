@@ -10,6 +10,7 @@ import { useSpotifyClient } from '@/hooks/useSpotifyClient'
 import { JourneyConfig } from '@/components/features/JourneyConfig'
 import { PlaybackView } from '@/components/features/PlaybackView'
 import { useJourneyStore } from '@/stores/journeyStore'
+import { usePrefsStore } from '@/stores/prefsStore'
 import type { Journey } from '@/types'
 
 type ViewState = 'config' | 'playback'
@@ -71,15 +72,28 @@ function AuthenticatedView(): React.ReactElement {
   const clearInterruptedJourney = useJourneyStore((s) => s.clearInterruptedJourney)
   const saveInterruptedJourney = useJourneyStore((s) => s.saveInterruptedJourney)
   const currentJourney = useJourneyStore((s) => s.currentJourney)
+  const setSelectedMood = useJourneyStore((s) => s.setSelectedMood)
+  const setSelectedDuration = useJourneyStore((s) => s.setSelectedDuration)
+
+  // Prefs store for last journey and quick start
+  const lastJourney = usePrefsStore((s) => s.lastJourney)
+  const lastMood = usePrefsStore((s) => s.lastMood)
+  const lastDuration = usePrefsStore((s) => s.lastDuration)
+  const saveCompletedJourney = usePrefsStore((s) => s.saveCompletedJourney)
+  const loadPrefsFromStorage = usePrefsStore((s) => s.loadFromStorage)
+  const prefsLoaded = usePrefsStore((s) => s.isLoaded)
 
   const spotifyClient = useSpotifyClient()
   const [isLoadingProfile, setIsLoadingProfile] = useState(false)
   const [viewState, setViewState] = useState<ViewState>('config')
 
-  // Load interrupted journey on mount
+  // Load interrupted journey and prefs on mount
   useEffect(() => {
     loadInterruptedJourney()
-  }, [loadInterruptedJourney])
+    if (!prefsLoaded) {
+      loadPrefsFromStorage()
+    }
+  }, [loadInterruptedJourney, loadPrefsFromStorage, prefsLoaded])
 
   const fetchUserData = useCallback(async (): Promise<void> => {
     if (!spotifyClient || user) return
@@ -163,7 +177,16 @@ function AuthenticatedView(): React.ReactElement {
   }
 
   const handleJourneyComplete = (): void => {
-    // Journey completed - clear any saved interrupted state
+    // Journey completed - save summary and clear interrupted state
+    if (currentJourney) {
+      const totalDuration = currentJourney.tracks.reduce((sum, t) => sum + t.durationMs, 0)
+      saveCompletedJourney({
+        mood: currentJourney.mood,
+        duration: Math.round(totalDuration / 60000),
+        songCount: currentJourney.tracks.length,
+        completedAt: new Date().toISOString(),
+      })
+    }
     clearInterruptedJourney()
   }
 
@@ -175,6 +198,16 @@ function AuthenticatedView(): React.ReactElement {
   const handleDiscardInterrupted = (): void => {
     clearInterruptedJourney()
   }
+
+  // Quick Start: use previous settings
+  const handleQuickStart = (): void => {
+    if (lastMood && lastDuration) {
+      setSelectedMood(lastMood)
+      setSelectedDuration(lastDuration)
+    }
+  }
+
+  const canQuickStart = lastMood && lastDuration
 
   // Show playback view
   if (viewState === 'playback') {
@@ -227,6 +260,37 @@ function AuthenticatedView(): React.ReactElement {
                     Discard
                   </Button>
                 </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Welcome Back with Last Journey Summary */}
+          {!interruptedJourney && lastJourney && (
+            <Card className="mb-6 p-4 bg-muted/50">
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-muted-foreground">Welcome back!</p>
+                  <h3 className="font-semibold">Your last journey</h3>
+                </div>
+                <div className="flex gap-4 text-sm">
+                  <div>
+                    <span className="font-medium capitalize">{lastJourney.mood}</span>
+                    <span className="text-muted-foreground"> mood</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">{lastJourney.songCount}</span>
+                    <span className="text-muted-foreground"> songs</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">{lastJourney.duration}</span>
+                    <span className="text-muted-foreground"> min</span>
+                  </div>
+                </div>
+                {canQuickStart && (
+                  <Button onClick={handleQuickStart} className="w-full" size="sm">
+                    Quick Start (Same Settings)
+                  </Button>
+                )}
               </div>
             </Card>
           )}

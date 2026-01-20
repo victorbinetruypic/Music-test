@@ -10,7 +10,10 @@ import {
   savePreferences,
   getSkipData,
   addSkipEntry,
+  getLastJourneySummary,
+  saveLastJourneySummary,
   type SkipEntry,
+  type LastJourneySummary,
 } from '@/lib/storage'
 
 interface PrefsStore {
@@ -19,6 +22,7 @@ interface PrefsStore {
   lastMood: Mood | null
   lastDuration: Duration | null
   skipData: SkipEntry[]
+  lastJourney: LastJourneySummary | null
   isLoaded: boolean
 
   // Actions
@@ -30,6 +34,7 @@ interface PrefsStore {
   setLastDuration: (duration: Duration) => void
   recordSkip: (entry: Omit<SkipEntry, 'timestamp'>) => void
   getSkipCountForTrack: (trackId: string) => number
+  saveCompletedJourney: (summary: LastJourneySummary) => void
 }
 
 export const usePrefsStore = create<PrefsStore>((set, get) => ({
@@ -37,18 +42,21 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   lastMood: null,
   lastDuration: null,
   skipData: [],
+  lastJourney: null,
   isLoaded: false,
 
   loadFromStorage: () => {
     const exclusions = new Set(getExclusions())
     const prefs = getPreferences()
     const skipData = getSkipData()
+    const lastJourney = getLastJourneySummary()
 
     set({
       exclusions,
       lastMood: prefs.lastMood,
       lastDuration: prefs.lastDuration,
       skipData,
+      lastJourney,
       isLoaded: true,
     })
   },
@@ -98,6 +106,11 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   getSkipCountForTrack: (trackId) => {
     const { skipData } = get()
     return skipData.filter((e) => e.trackId === trackId).length
+  },
+
+  saveCompletedJourney: (summary) => {
+    saveLastJourneySummary(summary)
+    set({ lastJourney: summary })
   },
 }))
 

@@ -8,7 +8,7 @@ import { MoodPicker } from './MoodPicker'
 import { DurationPicker } from './DurationPicker'
 import { ArcPreview } from './ArcVisualization'
 import { useJourneyStore } from '@/stores/journeyStore'
-import { usePrefsStore } from '@/stores/prefsStore'
+import { usePrefsStore, calculatePenaltyScore } from '@/stores/prefsStore'
 import { useSpotifyClient } from '@/hooks/useSpotifyClient'
 import { useAudioFeatures } from '@/hooks/useAudioFeatures'
 import {
@@ -46,6 +46,7 @@ export function JourneyConfig({
 
   // Prefs store
   const exclusions = usePrefsStore((s) => s.exclusions)
+  const skipData = usePrefsStore((s) => s.skipData)
   const lastMood = usePrefsStore((s) => s.lastMood)
   const lastDuration = usePrefsStore((s) => s.lastDuration)
   const setLastMood = usePrefsStore((s) => s.setLastMood)
@@ -159,12 +160,23 @@ export function JourneyConfig({
       const featuresMap = createFeaturesMap(cachedFeatures)
       const tracksWithFeatures = combineTracksWithFeatures(tracks, featuresMap)
 
+      // Compute skip penalties for frequency reduction (Story 4.4)
+      const skipPenalties = new Map<string, number>()
+      const trackIds = new Set(tracks.map((t) => t.id))
+      for (const trackId of trackIds) {
+        const penalty = calculatePenaltyScore(trackId, skipData)
+        if (penalty > 0) {
+          skipPenalties.set(trackId, penalty)
+        }
+      }
+
       // Generate journey
       const result = generateJourney({
         tracks: tracksWithFeatures,
         mood: selectedMood,
         duration: selectedDuration,
         excludedTrackIds: exclusions,
+        skipPenalties,
       })
 
       setJourney(result.journey)
@@ -178,7 +190,7 @@ export function JourneyConfig({
     } finally {
       setIsGenerating(false)
     }
-  }, [selectedMood, selectedDuration, featuresProgress, tracks, exclusions, setIsGenerating, setError, setJourney, onJourneyReady])
+  }, [selectedMood, selectedDuration, featuresProgress, tracks, exclusions, skipData, setIsGenerating, setError, setJourney, onJourneyReady])
 
   // Save playlist to Spotify
   const handleSavePlaylist = useCallback(async (): Promise<void> => {

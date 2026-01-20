@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
   EXCLUSIONS: 'music-test-exclusions',
   PREFERENCES: 'music-test-preferences',
   SKIP_DATA: 'music-test-skip-data',
+  LAST_JOURNEY: 'music-test-last-journey',
 } as const
 
 // Exclusion List ("Not This" songs)
@@ -160,6 +161,40 @@ export function getRecentSkipCount(trackId: string, journeyCount: number = 5): n
 export function clearSkipData(): void {
   try {
     localStorage.removeItem(STORAGE_KEYS.SKIP_DATA)
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
+// Last Journey Summary (for welcome back screen)
+export interface LastJourneySummary {
+  mood: Mood
+  duration: number // minutes
+  songCount: number
+  completedAt: string
+}
+
+export function getLastJourneySummary(): LastJourneySummary | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.LAST_JOURNEY)
+    if (!stored) return null
+    return JSON.parse(stored) as LastJourneySummary
+  } catch {
+    return null
+  }
+}
+
+export function saveLastJourneySummary(summary: LastJourneySummary): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.LAST_JOURNEY, JSON.stringify(summary))
+  } catch {
+    // localStorage may be full or unavailable
+  }
+}
+
+export function clearLastJourneySummary(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.LAST_JOURNEY)
   } catch {
     // localStorage may be unavailable
   }

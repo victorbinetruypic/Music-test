@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef } from 'react'
 
 import { usePlayerStore } from '@/stores/playerStore'
-import { useJourneyStore } from '@/stores/journeyStore'
+import { useJourneyStore, getPhaseForTrackIndex } from '@/stores/journeyStore'
 import { useAuthStore } from '@/stores/authStore'
+import { usePrefsStore } from '@/stores/prefsStore'
 import { RealPlayerService, type PlayerService, type SpotifyPlaybackState } from '@/lib/player'
 
 // Singleton state with proper locking
@@ -65,6 +66,10 @@ export function usePlayer() {
   const currentTrackIndex = useJourneyStore((s) => s.currentTrackIndex)
   const setCurrentTrackIndex = useJourneyStore((s) => s.setCurrentTrackIndex)
   const advanceToNextTrack = useJourneyStore((s) => s.advanceToNextTrack)
+
+  // Prefs store for feedback tracking
+  const recordSkip = usePrefsStore((s) => s.recordSkip)
+  const addExclusion = usePrefsStore((s) => s.addExclusion)
 
   const playbackState = usePlayerStore((s) => s.playbackState)
   const deviceId = usePlayerStore((s) => s.deviceId)
@@ -214,6 +219,25 @@ export function usePlayer() {
   const skip = useCallback(async () => {
     if (!playerServiceInstance || !currentJourney) return
 
+    // Record skip with context before skipping
+    const currentTrack = currentJourney.tracks[currentTrackIndex]
+    if (currentTrack) {
+      const phaseInfo = getPhaseForTrackIndex(currentJourney, currentTrackIndex)
+      const journeyLength = currentJourney.tracks.length
+      const positionRatio = currentTrackIndex / journeyLength
+
+      // Determine position: early (0-33%), middle (33-66%), late (66-100%)
+      let position: 'early' | 'middle' | 'late' = 'middle'
+      if (positionRatio < 0.33) position = 'early'
+      else if (positionRatio > 0.66) position = 'late'
+
+      recordSkip({
+        trackId: currentTrack.id,
+        phase: phaseInfo?.phase ?? 'build',
+        position,
+      })
+    }
+
     // Check if we're at the last track
     if (currentTrackIndex >= currentJourney.tracks.length - 1) {
       // Journey complete
@@ -229,7 +253,21 @@ export function usePlayer() {
     } else {
       advanceToNextTrack()
     }
-  }, [currentJourney, currentTrackIndex, advanceToNextTrack, setPlaybackState, setError])
+  }, [currentJourney, currentTrackIndex, advanceToNextTrack, setPlaybackState, setError, recordSkip])
+
+  // Mark a track as "Not This" - permanently exclude from future journeys
+  const markNotThis = useCallback(async () => {
+    if (!currentJourney) return
+
+    const currentTrack = currentJourney.tracks[currentTrackIndex]
+    if (currentTrack) {
+      // Add to exclusion list
+      addExclusion(currentTrack.id)
+
+      // Skip to next track
+      await skip()
+    }
+  }, [currentJourney, currentTrackIndex, addExclusion, skip])
 
   const seekTo = useCallback(
     async (positionMs: number) => {
@@ -286,6 +324,7 @@ export function usePlayer() {
     resume,
     togglePlayback,
     skip,
+    markNotThis,
     seekTo,
     changeVolume,
     resetPlayer,
