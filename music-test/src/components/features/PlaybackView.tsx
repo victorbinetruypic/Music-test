@@ -8,8 +8,7 @@ import { Slider } from '@/components/ui/slider'
 import { ArcVisualizationCompact } from './ArcVisualization'
 import { usePlayer } from '@/hooks/usePlayer'
 import { useJourneyStore, getCurrentTrack } from '@/stores/journeyStore'
-import { formatTime, getProgressPercent } from '@/stores/playerStore'
-import { cn } from '@/lib/utils'
+import { formatTime } from '@/stores/playerStore'
 
 interface PlaybackViewProps {
   onExit?: () => void

@@ -21,6 +21,7 @@ interface PrefsStore {
   exclusions: Set<string>
   lastMood: Mood | null
   lastDuration: Duration | null
+  volume: number
   skipData: SkipEntry[]
   lastJourney: LastJourneySummary | null
   isLoaded: boolean
@@ -32,6 +33,7 @@ interface PrefsStore {
   clearExclusions: () => void
   setLastMood: (mood: Mood) => void
   setLastDuration: (duration: Duration) => void
+  setVolume: (volume: number) => void
   recordSkip: (entry: Omit<SkipEntry, 'timestamp'>) => void
   getSkipCountForTrack: (trackId: string) => number
   saveCompletedJourney: (summary: LastJourneySummary) => void
@@ -41,6 +43,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   exclusions: new Set(),
   lastMood: null,
   lastDuration: null,
+  volume: 50,
   skipData: [],
   lastJourney: null,
   isLoaded: false,
@@ -55,6 +58,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
       exclusions,
       lastMood: prefs.lastMood,
       lastDuration: prefs.lastDuration,
+      volume: prefs.volume,
       skipData,
       lastJourney,
       isLoaded: true,
@@ -90,6 +94,12 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   setLastDuration: (duration) => {
     savePreferences({ lastDuration: duration })
     set({ lastDuration: duration })
+  },
+
+  setVolume: (volume) => {
+    const clampedVolume = Math.max(0, Math.min(100, volume))
+    savePreferences({ volume: clampedVolume })
+    set({ volume: clampedVolume })
   },
 
   recordSkip: (entry) => {

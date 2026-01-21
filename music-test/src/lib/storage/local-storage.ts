@@ -64,12 +64,14 @@ export function clearExclusions(): void {
 export interface UserPreferences {
   lastMood: Mood | null
   lastDuration: Duration | null
+  volume: number
   updatedAt: string
 }
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   lastMood: null,
   lastDuration: null,
+  volume: 50,
   updatedAt: new Date().toISOString(),
 }
 

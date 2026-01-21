@@ -40,7 +40,12 @@ export const usePlayerStore = create<PlayerStore>((set) => ({
   ...initialState,
 
   setPlaybackState: (playbackState) => {
-    set({ playbackState, error: playbackState === 'error' ? undefined : null })
+    // Only clear error when NOT transitioning to error state
+    if (playbackState !== 'error') {
+      set({ playbackState, error: null })
+    } else {
+      set({ playbackState })
+    }
   },
 
   setDeviceId: (deviceId) => {

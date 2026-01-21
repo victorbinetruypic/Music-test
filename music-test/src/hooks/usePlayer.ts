@@ -50,6 +50,10 @@ async function getOrCreatePlayer(
   }
 }
 
+// Journey position thresholds for skip tracking
+const POSITION_EARLY_THRESHOLD = 0.33 // First third of journey
+const POSITION_LATE_THRESHOLD = 0.66 // Last third of journey
+
 // Cleanup player instance
 function cleanupPlayer(): void {
   if (playerServiceInstance) {
@@ -67,9 +71,11 @@ export function usePlayer() {
   const setCurrentTrackIndex = useJourneyStore((s) => s.setCurrentTrackIndex)
   const advanceToNextTrack = useJourneyStore((s) => s.advanceToNextTrack)
 
-  // Prefs store for feedback tracking
+  // Prefs store for feedback tracking and persistence
   const recordSkip = usePrefsStore((s) => s.recordSkip)
   const addExclusion = usePrefsStore((s) => s.addExclusion)
+  const persistVolume = usePrefsStore((s) => s.setVolume)
+  const savedVolume = usePrefsStore((s) => s.volume)
 
   const playbackState = usePlayerStore((s) => s.playbackState)
   const deviceId = usePlayerStore((s) => s.deviceId)
@@ -219,6 +225,11 @@ export function usePlayer() {
   const skip = useCallback(async () => {
     if (!playerServiceInstance || !currentJourney) return
 
+    // Bounds check before accessing track
+    if (currentTrackIndex < 0 || currentTrackIndex >= currentJourney.tracks.length) {
+      return
+    }
+
     // Record skip with context before skipping
     const currentTrack = currentJourney.tracks[currentTrackIndex]
     if (currentTrack) {
@@ -228,8 +239,8 @@ export function usePlayer() {
 
       // Determine position: early (0-33%), middle (33-66%), late (66-100%)
       let position: 'early' | 'middle' | 'late' = 'middle'
-      if (positionRatio < 0.33) position = 'early'
-      else if (positionRatio > 0.66) position = 'late'
+      if (positionRatio < POSITION_EARLY_THRESHOLD) position = 'early'
+      else if (positionRatio > POSITION_LATE_THRESHOLD) position = 'late'
 
       recordSkip({
         trackId: currentTrack.id,
@@ -284,9 +295,10 @@ export function usePlayer() {
       const { error: volumeError } = await playerServiceInstance.setVolume(newVolume)
       if (!volumeError && mountedRef.current) {
         setVolume(newVolume)
+        persistVolume(newVolume) // Persist to localStorage
       }
     },
-    [setVolume]
+    [setVolume, persistVolume]
   )
 
   // Track mounted state and cleanup on unmount
@@ -299,6 +311,16 @@ export function usePlayer() {
       // when the user explicitly logs out or the app is closing.
     }
   }, [])
+
+  // Apply saved volume when SDK becomes ready
+  useEffect(() => {
+    if (isSDKReady && playerServiceInstance && savedVolume !== volume) {
+      playerServiceInstance.setVolume(savedVolume)
+      setVolume(savedVolume)
+    }
+    // Only run when SDK becomes ready, not on every volume change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSDKReady])
 
   // Check if journey is complete
   const isJourneyComplete = currentJourney
