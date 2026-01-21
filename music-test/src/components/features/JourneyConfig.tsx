@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { MoodPicker } from './MoodPicker'
 import { DurationPicker } from './DurationPicker'
 import { ArcPreview } from './ArcVisualization'
@@ -18,7 +17,6 @@ import {
   InsufficientSongsError,
 } from '@/lib/journey'
 import type { Track, Journey, Mood, Duration } from '@/types'
-import { Progress } from '@/components/ui/progress'
 
 interface JourneyConfigProps {
   likedSongsCount: number
@@ -114,7 +112,7 @@ export function JourneyConfig({
       setTracks(allTracks)
 
       // Fetch audio features
-      const features = await fetchFeatures(allTracks, spotifyClient)
+      await fetchFeatures(allTracks, spotifyClient)
 
       setIsLoadingTracks(false)
     } catch (err) {
@@ -226,15 +224,28 @@ export function JourneyConfig({
       : 0
 
     return (
-      <Card className="p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Preparing your library...</h2>
-        <Progress value={progressPercent} className="h-2" />
-        <p className="text-sm text-muted-foreground">
-          {featuresProgress
-            ? `Analyzing ${featuresProgress.current} of ${featuresProgress.total} songs`
-            : 'Loading your liked songs...'}
-        </p>
-      </Card>
+      <div className="bg-[#181818] rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-[#282828] flex items-center justify-center">
+            <div className="w-6 h-6 animate-spin rounded-full border-2 border-[#1DB954] border-t-transparent" />
+          </div>
+          <div>
+            <h2 className="font-bold text-white">Preparing your library</h2>
+            <p className="text-sm text-[#a7a7a7]">
+              {featuresProgress
+                ? `Analyzing ${featuresProgress.current} of ${featuresProgress.total} songs`
+                : 'Loading your liked songs...'}
+            </p>
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div className="h-1 bg-[#282828] rounded-full overflow-hidden">
+          <div
+            className="h-full bg-[#1DB954] transition-all duration-300 ease-out"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
     )
   }
 
@@ -246,15 +257,19 @@ export function JourneyConfig({
 
         {/* Save confirmation */}
         {savedPlaylistUrl && (
-          <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700 dark:bg-green-950/30 dark:text-green-400">
-            <div className="flex items-center gap-2">
-              <CheckIcon className="h-4 w-4" />
-              <span>Saved to Spotify!</span>
+          <div className="rounded-lg bg-[#1DB954]/20 p-4 border border-[#1DB954]/30">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#1DB954] flex items-center justify-center">
+                <CheckIcon className="w-4 h-4 text-black" />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-white">Saved to Spotify!</p>
+              </div>
               <a
                 href={savedPlaylistUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="underline hover:no-underline ml-auto"
+                className="text-[#1DB954] hover:underline text-sm font-medium"
               >
                 Open playlist
               </a>
@@ -264,13 +279,16 @@ export function JourneyConfig({
 
         {/* Error display */}
         {error && (
-          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-400">
-            {error}
+          <div className="rounded-lg bg-[#e91429]/20 p-4 border border-[#e91429]/30">
+            <p className="text-sm text-[#e91429]">{error}</p>
           </div>
         )}
 
-        <div className="flex gap-2">
-          <Button onClick={() => onJourneyReady?.(currentJourney)} className="flex-1">
+        <div className="flex gap-3">
+          <Button
+            onClick={() => onJourneyReady?.(currentJourney)}
+            className="flex-1 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-full py-6"
+          >
             Start Journey
           </Button>
           {!savedPlaylistUrl && (
@@ -278,12 +296,13 @@ export function JourneyConfig({
               variant="outline"
               onClick={handleSavePlaylist}
               disabled={isSavingPlaylist}
+              className="border-[#727272] text-white hover:bg-[#282828] hover:border-white rounded-full"
             >
               {isSavingPlaylist ? (
-                <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
-                  Saving...
-                </>
+                <div className="flex items-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  <span>Saving...</span>
+                </div>
               ) : (
                 'Save to Spotify'
               )}
@@ -292,7 +311,7 @@ export function JourneyConfig({
         </div>
         <Button
           variant="ghost"
-          className="w-full"
+          className="w-full text-[#a7a7a7] hover:text-white hover:bg-[#282828] rounded-full"
           onClick={() => {
             clearJourney()
             setSavedPlaylistUrl(null)
@@ -322,29 +341,28 @@ export function JourneyConfig({
       />
 
       {error && (
-        <div className="rounded-lg bg-red-50 p-4 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-400">
-          {error}
+        <div className="rounded-lg bg-[#e91429]/20 p-4 border border-[#e91429]/30">
+          <p className="text-sm text-[#e91429]">{error}</p>
         </div>
       )}
 
       <Button
         onClick={handleGenerate}
         disabled={!canGenerate || isGenerating}
-        className="w-full"
-        size="lg"
+        className="w-full bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-full py-6 text-lg disabled:bg-[#282828] disabled:text-[#6a6a6a]"
       >
         {isGenerating ? (
-          <>
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
-            Generating...
-          </>
+          <div className="flex items-center gap-3">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-black border-t-transparent" />
+            <span>Creating your journey...</span>
+          </div>
         ) : (
           'Create Journey'
         )}
       </Button>
 
       {!canGenerate && !isGenerating && (
-        <p className="text-sm text-center text-muted-foreground">
+        <p className="text-sm text-center text-[#6a6a6a]">
           Select a mood and duration to create your journey
         </p>
       )}
@@ -359,7 +377,7 @@ function CheckIcon({ className }: { className?: string }): React.ReactElement {
       className={className}
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="3"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

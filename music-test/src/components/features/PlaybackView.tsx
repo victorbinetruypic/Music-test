@@ -3,7 +3,6 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { ArcVisualizationCompact } from './ArcVisualization'
 import { usePlayer } from '@/hooks/usePlayer'
@@ -120,62 +119,81 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
   // Premium required view
   if (isPremium === false) {
     return (
-      <Card className="p-6 text-center space-y-4">
-        <div className="mx-auto w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950/30 flex items-center justify-center">
-          <PremiumIcon className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+      <div className="bg-[#181818] rounded-xl p-8 text-center space-y-6">
+        <div className="mx-auto w-16 h-16 rounded-full bg-[#f0b429]/20 flex items-center justify-center">
+          <PremiumIcon className="w-8 h-8 text-[#f0b429]" />
         </div>
-        <h2 className="text-xl font-semibold">Spotify Premium Required</h2>
-        <p className="text-muted-foreground">
-          In-browser playback requires a Spotify Premium subscription.
-        </p>
-        <div className="flex flex-col gap-2">
+        <div>
+          <h2 className="text-xl font-bold mb-2">Spotify Premium Required</h2>
+          <p className="text-[#a7a7a7]">
+            In-browser playback requires a Spotify Premium subscription.
+          </p>
+        </div>
+        <div className="flex flex-col gap-3">
           {currentJourney && (
             <Button
-              variant="outline"
               onClick={() => {
-                // Open Spotify with the first track
                 window.open(`https://open.spotify.com/track/${currentJourney.tracks[0].id}`, '_blank')
               }}
+              className="bg-[#1DB954] hover:bg-[#1ed760] text-black font-semibold rounded-full"
             >
               Open in Spotify App
             </Button>
           )}
-          <Button variant="ghost" onClick={onExit}>
+          <Button
+            variant="ghost"
+            onClick={onExit}
+            className="text-[#a7a7a7] hover:text-white hover:bg-[#282828] rounded-full"
+          >
             Go Back
           </Button>
         </div>
-      </Card>
+      </div>
     )
   }
 
   // Loading/initializing view
   if (!isSDKReady || playbackState === 'loading') {
     return (
-      <Card className="p-6 text-center space-y-4">
-        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        <p className="text-muted-foreground">
+      <div className="bg-[#181818] rounded-xl p-8 text-center space-y-4">
+        <div className="mx-auto w-12 h-12 rounded-full bg-[#1DB954] flex items-center justify-center animate-pulse">
+          <SpotifyIcon className="w-6 h-6 text-black" />
+        </div>
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#1DB954] border-t-transparent mx-auto" />
+        <p className="text-[#a7a7a7]">
           {!isSDKReady ? 'Connecting to Spotify...' : 'Starting playback...'}
         </p>
-      </Card>
+      </div>
     )
   }
 
   // Error view
   if (playbackState === 'error' && error) {
     return (
-      <Card className="p-6 text-center space-y-4">
-        <div className="mx-auto w-12 h-12 rounded-full bg-red-100 dark:bg-red-950/30 flex items-center justify-center">
-          <ErrorIcon className="w-6 h-6 text-red-600 dark:text-red-400" />
+      <div className="bg-[#181818] rounded-xl p-8 text-center space-y-6">
+        <div className="mx-auto w-16 h-16 rounded-full bg-[#e91429]/20 flex items-center justify-center">
+          <ErrorIcon className="w-8 h-8 text-[#e91429]" />
         </div>
-        <h2 className="text-xl font-semibold">Playback Error</h2>
-        <p className="text-muted-foreground">{error}</p>
-        <div className="flex gap-2 justify-center">
-          <Button onClick={handleStartPlayback}>Retry</Button>
-          <Button variant="outline" onClick={onExit}>
+        <div>
+          <h2 className="text-xl font-bold mb-2">Playback Error</h2>
+          <p className="text-[#a7a7a7]">{error}</p>
+        </div>
+        <div className="flex gap-3 justify-center">
+          <Button
+            onClick={handleStartPlayback}
+            className="bg-[#1DB954] hover:bg-[#1ed760] text-black font-semibold rounded-full px-6"
+          >
+            Retry
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={onExit}
+            className="text-[#a7a7a7] hover:text-white hover:bg-[#282828] rounded-full"
+          >
             Go Back
           </Button>
         </div>
-      </Card>
+      </div>
     )
   }
 
@@ -186,16 +204,21 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
         {currentJourney && (
           <ArcVisualizationCompact journey={currentJourney} currentTrackIndex={-1} />
         )}
-        <Card className="p-6 text-center space-y-4">
-          <h2 className="text-xl font-semibold">Ready to Play</h2>
-          <p className="text-muted-foreground">
-            Your journey is ready. Press play to begin.
-          </p>
-          <Button size="lg" onClick={handleStartPlayback} className="gap-2">
-            <PlayIcon className="w-5 h-5" />
+        <div className="bg-[#181818] rounded-xl p-8 text-center space-y-6">
+          <div>
+            <h2 className="text-xl font-bold mb-2">Ready to Play</h2>
+            <p className="text-[#a7a7a7]">
+              Your journey is ready. Press play to begin.
+            </p>
+          </div>
+          <Button
+            onClick={handleStartPlayback}
+            className="bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-full px-8 py-6 text-lg hover:scale-105 transition-transform"
+          >
+            <PlayIcon className="w-6 h-6 mr-2" />
             Start Journey
           </Button>
-        </Card>
+        </div>
       </div>
     )
   }
@@ -206,49 +229,58 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
     const durationMinutes = Math.round(totalDuration / 60000)
 
     return (
-      <Card className="p-6 text-center space-y-6">
-        <div className="mx-auto w-16 h-16 rounded-full bg-green-100 dark:bg-green-950/30 flex items-center justify-center">
-          <CheckIcon className="w-8 h-8 text-green-600 dark:text-green-400" />
+      <div className="bg-[#181818] rounded-xl p-8 text-center space-y-8">
+        <div className="mx-auto w-20 h-20 rounded-full bg-[#1DB954] flex items-center justify-center">
+          <CheckIcon className="w-10 h-10 text-black" />
         </div>
         <div>
           <h2 className="text-2xl font-bold mb-2">Journey Complete!</h2>
-          <p className="text-muted-foreground">
+          <p className="text-[#a7a7a7]">
             You listened to {currentJourney.tracks.length} songs over {durationMinutes} minutes.
           </p>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <div className="text-2xl font-bold">{currentJourney.tracks.length}</div>
-            <div className="text-xs text-muted-foreground">Songs</div>
+        <div className="flex justify-center gap-8">
+          <div className="text-center">
+            <div className="text-3xl font-bold text-[#1DB954]">{currentJourney.tracks.length}</div>
+            <div className="text-xs text-[#a7a7a7] uppercase tracking-wide">Songs</div>
           </div>
-          <div>
-            <div className="text-2xl font-bold">{durationMinutes}</div>
-            <div className="text-xs text-muted-foreground">Minutes</div>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-[#1DB954]">{durationMinutes}</div>
+            <div className="text-xs text-[#a7a7a7] uppercase tracking-wide">Minutes</div>
           </div>
-          <div>
-            <div className="text-2xl font-bold capitalize">{currentJourney.mood}</div>
-            <div className="text-xs text-muted-foreground">Mood</div>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-[#1DB954] capitalize">{currentJourney.mood}</div>
+            <div className="text-xs text-[#a7a7a7] uppercase tracking-wide">Mood</div>
           </div>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <Button onClick={onExit}>Start New Journey</Button>
-          <Button variant="ghost" onClick={onExit}>
+        <div className="flex flex-col gap-3">
+          <Button
+            onClick={onExit}
+            className="bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-full py-6"
+          >
+            Start New Journey
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={onExit}
+            className="text-[#a7a7a7] hover:text-white hover:bg-[#282828] rounded-full"
+          >
             Done
           </Button>
         </div>
-      </Card>
+      </div>
     )
   }
 
   // Active playback view
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* "Not This" confirmation toast */}
       {showNotThisConfirm && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="rounded-lg bg-foreground text-background px-4 py-2 text-sm font-medium shadow-lg">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="rounded-full bg-[#1DB954] text-black px-6 py-3 text-sm font-semibold shadow-lg">
             Got it, removed from future journeys
           </div>
         </div>
@@ -260,22 +292,22 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
       )}
 
       {/* Now playing card */}
-      <Card className="p-4 space-y-4">
+      <div className="bg-[#181818] rounded-xl p-6 space-y-6">
         {/* Track info */}
         <div className="text-center">
           {currentTrack ? (
             <>
-              <h3 className="font-semibold text-lg truncate">{currentTrack.name}</h3>
-              <p className="text-sm text-muted-foreground truncate">{currentTrack.artist}</p>
-              <p className="text-xs text-muted-foreground truncate">{currentTrack.album}</p>
+              <h3 className="font-bold text-xl text-white truncate">{currentTrack.name}</h3>
+              <p className="text-[#a7a7a7] truncate">{currentTrack.artist}</p>
+              <p className="text-sm text-[#6a6a6a] truncate">{currentTrack.album}</p>
             </>
           ) : (
-            <p className="text-muted-foreground">No track playing</p>
+            <p className="text-[#a7a7a7]">No track playing</p>
           )}
         </div>
 
         {/* Progress bar */}
-        <div className="space-y-1">
+        <div className="space-y-2">
           <Slider
             value={[seekingPosition ?? currentPosition]}
             max={duration || 100}
@@ -283,28 +315,33 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
             onValueChange={([value]) => handleSeek(value)}
             className="w-full"
           />
-          <div className="flex justify-between text-xs text-muted-foreground">
+          <div className="flex justify-between text-xs text-[#a7a7a7]">
             <span>{formatTime(seekingPosition ?? currentPosition)}</span>
             <span>{formatTime(duration)}</span>
           </div>
         </div>
 
         {/* Playback controls */}
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex items-center justify-center gap-6">
           <Button
             variant="ghost"
             size="icon"
             onClick={togglePlayback}
-            className="h-14 w-14 rounded-full"
+            className="h-16 w-16 rounded-full bg-white hover:bg-[#f0f0f0] hover:scale-105 transition-transform"
           >
             {playbackState === 'playing' ? (
-              <PauseIcon className="h-8 w-8" />
+              <PauseIcon className="h-8 w-8 text-black" />
             ) : (
-              <PlayIcon className="h-8 w-8" />
+              <PlayIcon className="h-8 w-8 text-black" />
             )}
           </Button>
-          <Button variant="ghost" size="icon" onClick={skip} className="h-10 w-10">
-            <SkipIcon className="h-5 w-5" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={skip}
+            className="h-12 w-12 text-[#a7a7a7] hover:text-white hover:bg-[#282828] rounded-full"
+          >
+            <SkipIcon className="h-6 w-6" />
           </Button>
         </div>
 
@@ -314,16 +351,16 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
             variant="ghost"
             size="sm"
             onClick={handleNotThis}
-            className="text-xs text-muted-foreground hover:text-destructive"
+            className="text-[#a7a7a7] hover:text-[#e91429] hover:bg-[#e91429]/10 rounded-full px-4"
           >
-            <BanIcon className="h-3 w-3 mr-1" />
+            <BanIcon className="h-4 w-4 mr-2" />
             Not This
           </Button>
         </div>
 
         {/* Volume control */}
-        <div className="flex items-center gap-2">
-          <VolumeIcon className="h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-3 px-4">
+          <VolumeIcon className="h-5 w-5 text-[#a7a7a7]" />
           <Slider
             value={[volume]}
             max={100}
@@ -332,10 +369,14 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
             className="flex-1"
           />
         </div>
-      </Card>
+      </div>
 
       {/* Exit button */}
-      <Button variant="ghost" className="w-full" onClick={onExit}>
+      <Button
+        variant="ghost"
+        className="w-full text-[#a7a7a7] hover:text-white hover:bg-[#282828] rounded-full"
+        onClick={onExit}
+      >
         Exit Journey
       </Button>
     </div>
@@ -430,7 +471,7 @@ function CheckIcon({ className }: { className?: string }): React.ReactElement {
       className={className}
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="3"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -454,6 +495,14 @@ function BanIcon({ className }: { className?: string }): React.ReactElement {
     >
       <circle cx="12" cy="12" r="10" />
       <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+    </svg>
+  )
+}
+
+function SpotifyIcon({ className }: { className?: string }): React.ReactElement {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
     </svg>
   )
 }
