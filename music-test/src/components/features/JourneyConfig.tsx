@@ -86,12 +86,24 @@ export function JourneyConfig({
     setError(null)
 
     try {
-      // Fetch all liked songs (paginated)
-      const allTracks: Track[] = []
-      let offset = 0
+      // Sample random pages from the library instead of loading everything.
+      // A journey only needs a diverse pool — 500 tracks is more than enough.
       const limit = 50
+      const totalPages = Math.ceil(likedSongsCount / limit)
+      const MAX_SAMPLE_TRACKS = 500
+      const pagesToFetch = Math.min(totalPages, Math.ceil(MAX_SAMPLE_TRACKS / limit))
 
-      while (offset < likedSongsCount) {
+      // Pick random page offsets spread across the library
+      const allOffsets = Array.from({ length: totalPages }, (_, i) => i * limit)
+      for (let i = allOffsets.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [allOffsets[i], allOffsets[j]] = [allOffsets[j], allOffsets[i]]
+      }
+      const selectedOffsets = allOffsets.slice(0, pagesToFetch).sort((a, b) => a - b)
+
+      const allTracks: Track[] = []
+
+      for (const offset of selectedOffsets) {
         const { data, error: fetchError } = await spotifyClient.getLikedSongs(limit, offset)
         if (fetchError) {
           setError(fetchError)
@@ -101,12 +113,9 @@ export function JourneyConfig({
         if (data) {
           allTracks.push(...data)
         }
-        offset += limit
 
-        // Safety check to avoid infinite loop
-        if (allTracks.length >= likedSongsCount || !data || data.length < limit) {
-          break
-        }
+        // Delay between pages to avoid rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 500))
       }
 
       setTracks(allTracks)

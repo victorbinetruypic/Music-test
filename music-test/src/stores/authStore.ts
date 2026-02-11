@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { refreshAccessToken } from '@/lib/spotify/auth'
 
 interface SpotifyTokens {
   accessToken: string
@@ -29,6 +30,7 @@ interface AuthStore {
   setError: (message: string | null) => void
   logout: () => void
   loadFromStorage: () => void
+  refreshTokenIfNeeded: () => Promise<void>
 }
 
 const STORAGE_KEY = 'music-test-auth'
@@ -116,7 +118,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       if (stored) {
         const data = JSON.parse(stored)
         if (data.tokens) {
-          // Check if token is expired
           const now = Date.now()
           if (data.tokens.expiresAt > now) {
             set({
@@ -124,13 +125,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
               user: data.user || null,
               isAuthenticated: true,
             })
-          } else {
-            // Token expired, will need refresh
+          } else if (data.tokens.refreshToken) {
+            // Token expired but we have a refresh token — store it and trigger refresh
             set({
               tokens: data.tokens,
               user: data.user || null,
-              isAuthenticated: false, // Mark as not authenticated until refresh
+              isAuthenticated: false,
             })
+            // Auto-refresh in background
+            get().refreshTokenIfNeeded()
           }
         }
       }
@@ -138,5 +141,38 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       // Invalid storage data, clear it
       localStorage.removeItem(STORAGE_KEY)
     }
+  },
+
+  refreshTokenIfNeeded: async () => {
+    const { tokens, isRefreshingToken } = get()
+    if (!tokens?.refreshToken || isRefreshingToken) return
+
+    const now = Date.now()
+    const REFRESH_BUFFER_MS = 5 * 60 * 1000 // 5 minutes before expiry
+
+    // Refresh if expired or expiring within buffer
+    if (tokens.expiresAt > now + REFRESH_BUFFER_MS) return
+
+    set({ isRefreshingToken: true })
+
+    const { data, error } = await refreshAccessToken(tokens.refreshToken)
+
+    if (error || !data) {
+      set({ isRefreshingToken: false })
+      // If refresh fails on an already-expired token, log out
+      if (tokens.expiresAt <= now) {
+        get().logout()
+      }
+      return
+    }
+
+    const newTokens = {
+      accessToken: data.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: now + data.expiresIn * 1000,
+    }
+
+    get().setTokens(newTokens)
+    set({ isRefreshingToken: false, isAuthenticated: true })
   },
 }))

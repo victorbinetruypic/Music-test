@@ -7,25 +7,22 @@ import { useJourneyStore, getPhaseForTrackIndex } from '@/stores/journeyStore'
 import { useAuthStore } from '@/stores/authStore'
 import { usePrefsStore } from '@/stores/prefsStore'
 import { RealPlayerService, type PlayerService, type SpotifyPlaybackState } from '@/lib/player'
-import { CrossfadeEngine } from '@/lib/player/crossfade'
+import { useCrossfade, getCrossfadeEngine, destroyCrossfadeEngine } from './useCrossfade'
 
 // Singleton state with proper locking
 let playerServiceInstance: PlayerService | null = null
 let initializationPromise: Promise<boolean> | null = null
 let isInitializing = false
-let crossfadeEngine: CrossfadeEngine | null = null
 
 // Get or create player instance with lock
 async function getOrCreatePlayer(
   token: string,
   callbacks: Parameters<PlayerService['initialize']>[1]
 ): Promise<{ instance: PlayerService; isNew: boolean }> {
-  // If already initialized, return existing instance
   if (playerServiceInstance) {
     return { instance: playerServiceInstance, isNew: false }
   }
 
-  // If initialization is in progress, wait for it
   if (initializationPromise) {
     await initializationPromise
     if (playerServiceInstance) {
@@ -33,7 +30,6 @@ async function getOrCreatePlayer(
     }
   }
 
-  // Start new initialization
   isInitializing = true
   const newInstance = new RealPlayerService()
 
@@ -53,15 +49,12 @@ async function getOrCreatePlayer(
 }
 
 // Journey position thresholds for skip tracking
-const POSITION_EARLY_THRESHOLD = 0.33 // First third of journey
-const POSITION_LATE_THRESHOLD = 0.66 // Last third of journey
+const POSITION_EARLY_THRESHOLD = 0.33
+const POSITION_LATE_THRESHOLD = 0.66
 
 // Cleanup player instance
 function cleanupPlayer(): void {
-  if (crossfadeEngine) {
-    crossfadeEngine.destroy()
-    crossfadeEngine = null
-  }
+  destroyCrossfadeEngine()
   if (playerServiceInstance) {
     playerServiceInstance.disconnect()
     playerServiceInstance = null
@@ -77,7 +70,6 @@ export function usePlayer() {
   const setCurrentTrackIndex = useJourneyStore((s) => s.setCurrentTrackIndex)
   const advanceToNextTrack = useJourneyStore((s) => s.advanceToNextTrack)
 
-  // Prefs store for feedback tracking and persistence
   const recordSkip = usePrefsStore((s) => s.recordSkip)
   const addExclusion = usePrefsStore((s) => s.addExclusion)
   const persistVolume = usePrefsStore((s) => s.setVolume)
@@ -91,8 +83,6 @@ export function usePlayer() {
   const currentPosition = usePlayerStore((s) => s.currentPosition)
   const duration = usePlayerStore((s) => s.duration)
   const volume = usePlayerStore((s) => s.volume)
-  const isCrossfadeEnabled = usePlayerStore((s) => s.isCrossfadeEnabled)
-  const crossfadeStatus = usePlayerStore((s) => s.crossfadeStatus)
 
   const setPlaybackState = usePlayerStore((s) => s.setPlaybackState)
   const setDeviceId = usePlayerStore((s) => s.setDeviceId)
@@ -102,17 +92,17 @@ export function usePlayer() {
   const setPosition = usePlayerStore((s) => s.setPosition)
   const setDuration = usePlayerStore((s) => s.setDuration)
   const setVolume = usePlayerStore((s) => s.setVolume)
-  const setCrossfadeEnabled = usePlayerStore((s) => s.setCrossfadeEnabled)
-  const setCrossfadeStatus = usePlayerStore((s) => s.setCrossfadeStatus)
   const resetPlayer = usePlayerStore((s) => s.reset)
 
   const journeyTracksRef = useRef<string[]>([])
   const mountedRef = useRef(true)
 
+  // Crossfade (delegated to dedicated hook)
+  const { isCrossfadeEnabled, crossfadeStatus, toggleCrossfade } = useCrossfade(playerServiceInstance)
+
   // Handle state changes from SDK
   const handleStateChange = useCallback(
     (state: SpotifyPlaybackState | null) => {
-      // Guard against updates after unmount
       if (!mountedRef.current) return
 
       if (!state) {
@@ -124,15 +114,13 @@ export function usePlayer() {
       setPosition(state.position)
       setDuration(state.duration)
 
-      // Check if track changed by comparing URIs
       if (currentJourney && state.track_window?.current_track) {
         const currentUri = state.track_window.current_track.uri
         const expectedTrackIndex = journeyTracksRef.current.indexOf(currentUri)
 
         if (expectedTrackIndex !== -1 && expectedTrackIndex !== currentTrackIndex) {
           setCurrentTrackIndex(expectedTrackIndex)
-          // Notify crossfade engine of track change
-          crossfadeEngine?.handleTrackChange(currentUri)
+          getCrossfadeEngine()?.handleTrackChange(currentUri)
         }
       }
     },
@@ -175,7 +163,6 @@ export function usePlayer() {
         },
       })
 
-      // If we're reusing an existing instance, update SDK ready state
       if (!isNew && playerServiceInstance) {
         setSDKReady(true)
         setPlaybackState('idle')
@@ -237,19 +224,17 @@ export function usePlayer() {
   const skip = useCallback(async () => {
     if (!playerServiceInstance || !currentJourney) return
 
-    // Bounds check before accessing track
     if (currentTrackIndex < 0 || currentTrackIndex >= currentJourney.tracks.length) {
       return
     }
 
-    // Record skip with context before skipping
+    // Record skip with context
     const currentTrack = currentJourney.tracks[currentTrackIndex]
     if (currentTrack) {
       const phaseInfo = getPhaseForTrackIndex(currentJourney, currentTrackIndex)
       const journeyLength = currentJourney.tracks.length
       const positionRatio = currentTrackIndex / journeyLength
 
-      // Determine position: early (0-33%), middle (33-66%), late (66-100%)
       let position: 'early' | 'middle' | 'late' = 'middle'
       if (positionRatio < POSITION_EARLY_THRESHOLD) position = 'early'
       else if (positionRatio > POSITION_LATE_THRESHOLD) position = 'late'
@@ -261,9 +246,7 @@ export function usePlayer() {
       })
     }
 
-    // Check if we're at the last track
     if (currentTrackIndex >= currentJourney.tracks.length - 1) {
-      // Journey complete
       setPlaybackState('idle')
       return
     }
@@ -278,16 +261,12 @@ export function usePlayer() {
     }
   }, [currentJourney, currentTrackIndex, advanceToNextTrack, setPlaybackState, setError, recordSkip])
 
-  // Mark a track as "Not This" - permanently exclude from future journeys
   const markNotThis = useCallback(async () => {
     if (!currentJourney) return
 
     const currentTrack = currentJourney.tracks[currentTrackIndex]
     if (currentTrack) {
-      // Add to exclusion list
       addExclusion(currentTrack.id)
-
-      // Skip to next track
       await skip()
     }
   }, [currentJourney, currentTrackIndex, addExclusion, skip])
@@ -307,21 +286,18 @@ export function usePlayer() {
       const { error: volumeError } = await playerServiceInstance.setVolume(newVolume)
       if (!volumeError && mountedRef.current) {
         setVolume(newVolume)
-        persistVolume(newVolume) // Persist to localStorage
-        crossfadeEngine?.setUserVolume(newVolume) // Sync with crossfade
+        persistVolume(newVolume)
+        getCrossfadeEngine()?.setUserVolume(newVolume)
       }
     },
     [setVolume, persistVolume]
   )
 
-  // Track mounted state and cleanup on unmount
+  // Track mounted state
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      // Note: We don't cleanup the player here because it's a singleton
-      // that should persist across component remounts. Only cleanup
-      // when the user explicitly logs out or the app is closing.
     }
   }, [])
 
@@ -331,53 +307,9 @@ export function usePlayer() {
       playerServiceInstance.setVolume(savedVolume)
       setVolume(savedVolume)
     }
-    // Only run when SDK becomes ready, not on every volume change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSDKReady])
 
-  // Initialize crossfade engine when SDK is ready
-  useEffect(() => {
-    if (!isSDKReady || !playerServiceInstance) return
-
-    if (!crossfadeEngine) {
-      crossfadeEngine = new CrossfadeEngine({
-        getState: () => playerServiceInstance!.getState(),
-        setVolume: (vol) => playerServiceInstance!.setVolume(vol),
-        onStatusChange: (status) => setCrossfadeStatus(status),
-        onTrackChange: () => {
-          // Track change detected by crossfade polling — advance journey index
-          // (handleStateChange already does this via SDK events, so this is a backup)
-        },
-      })
-    }
-
-    crossfadeEngine.setEnabled(isCrossfadeEnabled)
-    crossfadeEngine.setUserVolume(savedVolume)
-  }, [isSDKReady, isCrossfadeEnabled, savedVolume, setCrossfadeStatus])
-
-  // Start/stop crossfade polling based on playback state
-  useEffect(() => {
-    if (!crossfadeEngine) return
-
-    if (playbackState === 'playing') {
-      crossfadeEngine.startPolling()
-    } else {
-      crossfadeEngine.stopPolling()
-    }
-
-    return () => {
-      crossfadeEngine?.stopPolling()
-    }
-  }, [playbackState])
-
-  // Toggle crossfade
-  const toggleCrossfade = useCallback(() => {
-    const newValue = !isCrossfadeEnabled
-    setCrossfadeEnabled(newValue)
-    crossfadeEngine?.setEnabled(newValue)
-  }, [isCrossfadeEnabled, setCrossfadeEnabled])
-
-  // Check if journey is complete
   const isJourneyComplete = currentJourney
     ? currentTrackIndex >= currentJourney.tracks.length - 1 && playbackState === 'idle'
     : false
@@ -408,6 +340,6 @@ export function usePlayer() {
     changeVolume,
     toggleCrossfade,
     resetPlayer,
-    cleanupPlayer, // Export for logout scenarios
+    cleanupPlayer,
   }
 }

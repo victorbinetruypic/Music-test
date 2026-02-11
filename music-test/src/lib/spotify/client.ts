@@ -7,6 +7,7 @@ import type {
   SpotifyTrack,
 } from './types'
 import type { Track, AudioFeatures } from '@/types'
+import { enqueueRequest } from './request-queue'
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1'
 
@@ -40,14 +41,16 @@ export class RealSpotifyClient implements SpotifyClient {
     const rateRetries = context.rateRetries ?? 0
 
     try {
-      const response = await fetch(`${SPOTIFY_API_BASE}${endpoint}`, {
-        ...options,
-        headers: {
-          Authorization: `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-      })
+      const response = await enqueueRequest(() =>
+        fetch(`${SPOTIFY_API_BASE}${endpoint}`, {
+          ...options,
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json',
+            ...options.headers,
+          },
+        })
+      )
 
       if (response.status === 401) {
         if (this.onTokenExpired && authRetries < 1) {
@@ -211,6 +214,11 @@ export class RealSpotifyClient implements SpotifyClient {
 
       if (addError) {
         return { data: null, error: `Failed to add tracks: ${addError}` }
+      }
+
+      // Delay between batches to avoid rate limiting
+      if (i + 100 < trackUris.length) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
       }
     }
 

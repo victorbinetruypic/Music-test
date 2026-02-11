@@ -10,7 +10,7 @@ import {
 } from '@/lib/storage'
 
 const BATCH_SIZE = 100
-const BATCH_DELAY_MS = 100 // Small delay between batches to avoid rate limiting
+const BATCH_DELAY_MS = 500 // Delay between batches to avoid rate limiting
 
 export interface FetchProgress {
   current: number

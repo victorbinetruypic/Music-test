@@ -53,7 +53,7 @@ export class CrossfadeEngine {
 
   startPolling(): void {
     this.stopPolling()
-    this.pollInterval = setInterval(() => this.poll(), 500)
+    this.pollInterval = setInterval(() => this.poll(), 2000)
   }
 
   stopPolling(): void {
@@ -107,8 +107,8 @@ export class CrossfadeEngine {
     const remaining = duration - position
     const fadeDuration = this.getFadeDuration()
 
-    // Trigger fade-out when remaining time ≤ fadeDuration + 500ms
-    if (remaining <= fadeDuration + 500 && remaining > 0) {
+    // Trigger fade-out when remaining time ≤ fadeDuration + 2500ms (accounts for 2s poll interval)
+    if (remaining <= fadeDuration + 2500 && remaining > 0) {
       this.fadeOut(fadeDuration)
     }
   }
