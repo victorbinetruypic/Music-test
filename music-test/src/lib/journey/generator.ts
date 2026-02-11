@@ -1,9 +1,10 @@
 import type { GenerationInput, GenerationResult, PhaseInfo, TrackWithFeatures } from './types'
-import type { Track, Journey, Duration } from '@/types'
+import type { Track, AudioFeatures, Journey, Duration } from '@/types'
 import { selectTemplate, calculatePhaseSongCounts } from './templates'
 import { filterTracksByMood } from './matcher'
 import { sequenceTracksForPhase, removeFromPool } from './sequencer'
 import { validateGenerationInput } from './validator'
+import { scoreTransition } from './transition-scorer'
 
 /**
  * Generate a journey playlist using template-based arc patterns
@@ -55,6 +56,10 @@ export function generateJourney(input: GenerationInput): GenerationResult {
     })
   })
 
+  // Optimize phase boundaries for smoother transitions
+  const featuresMap = buildFeaturesLookup(input.tracks)
+  optimizePhaseBoundaries(allTracks, phases, featuresMap)
+
   // Calculate actual duration
   const actualDuration = allTracks.reduce((sum, t) => sum + t.durationMs, 0) / 60000
 
@@ -94,20 +99,94 @@ function generateId(): string {
 }
 
 /**
+ * Build a lookup from track ID → AudioFeatures from the input TrackWithFeatures array.
+ */
+function buildFeaturesLookup(tracks: TrackWithFeatures[]): Map<string, AudioFeatures> {
+  const map = new Map<string, AudioFeatures>()
+  for (const twf of tracks) {
+    map.set(twf.track.id, twf.features)
+  }
+  return map
+}
+
+/**
+ * Optimize phase boundaries by trying swaps at each boundary.
+ * For each boundary (last track of phase N, first track of phase N+1),
+ * try swapping boundary-adjacent tracks to improve the transition score.
+ * Mutates allTracks and phases in place.
+ */
+function optimizePhaseBoundaries(
+  allTracks: Track[],
+  phases: PhaseInfo[],
+  featuresMap: Map<string, AudioFeatures>
+): void {
+  for (let p = 0; p < phases.length - 1; p++) {
+    const endIdx = phases[p].endIndex
+    const startIdx = phases[p + 1].startIndex
+
+    // Need at least 2 tracks in each phase to swap
+    if (phases[p].endIndex <= phases[p].startIndex) continue
+    if (phases[p + 1].endIndex <= phases[p + 1].startIndex) continue
+
+    const featA = featuresMap.get(allTracks[endIdx].id)
+    const featB = featuresMap.get(allTracks[startIdx].id)
+    if (!featA || !featB) continue
+
+    const currentScore = scoreTransition(featA, featB)
+
+    // Try swapping the last track of phase N with the second-to-last
+    let bestScore = currentScore
+    let bestSwap: [number, number] | null = null
+
+    // Candidate 1: swap endIdx with endIdx-1, check boundary score
+    const prevIdx = endIdx - 1
+    if (prevIdx >= phases[p].startIndex) {
+      const featPrev = featuresMap.get(allTracks[prevIdx].id)
+      if (featPrev) {
+        const newScore = scoreTransition(featPrev, featB)
+        if (newScore > bestScore) {
+          bestScore = newScore
+          bestSwap = [prevIdx, endIdx]
+        }
+      }
+    }
+
+    // Candidate 2: swap startIdx with startIdx+1, check boundary score
+    const nextIdx = startIdx + 1
+    if (nextIdx <= phases[p + 1].endIndex) {
+      const featNext = featuresMap.get(allTracks[nextIdx].id)
+      if (featNext) {
+        const newScore = scoreTransition(featA, featNext)
+        if (newScore > bestScore) {
+          bestScore = newScore
+          bestSwap = [startIdx, nextIdx]
+        }
+      }
+    }
+
+    if (bestSwap) {
+      const [i, j] = bestSwap
+      ;[allTracks[i], allTracks[j]] = [allTracks[j], allTracks[i]]
+      // Update phase track arrays
+      for (const phase of phases) {
+        phase.tracks = allTracks.slice(phase.startIndex, phase.endIndex + 1)
+      }
+    }
+  }
+}
+
+/**
  * Combine tracks with their audio features
  */
 export function combineTracksWithFeatures(
   tracks: Track[],
-  featuresMap: Map<string, { energy: number; valence: number; tempo: number; danceability: number }>
+  featuresMap: Map<string, AudioFeatures>
 ): TrackWithFeatures[] {
   return tracks
     .filter((t) => featuresMap.has(t.id))
     .map((track) => ({
       track,
-      features: {
-        id: track.id,
-        ...featuresMap.get(track.id)!,
-      },
+      features: featuresMap.get(track.id)!,
     }))
 }
 
@@ -115,16 +194,11 @@ export function combineTracksWithFeatures(
  * Create a features map from an array of audio features
  */
 export function createFeaturesMap(
-  features: Array<{ id: string; energy: number; valence: number; tempo: number; danceability: number }>
-): Map<string, { energy: number; valence: number; tempo: number; danceability: number }> {
-  const map = new Map<string, { energy: number; valence: number; tempo: number; danceability: number }>()
+  features: AudioFeatures[]
+): Map<string, AudioFeatures> {
+  const map = new Map<string, AudioFeatures>()
   for (const f of features) {
-    map.set(f.id, {
-      energy: f.energy,
-      valence: f.valence,
-      tempo: f.tempo,
-      danceability: f.danceability,
-    })
+    map.set(f.id, f)
   }
   return map
 }

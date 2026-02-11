@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 export type PlaybackState = 'idle' | 'loading' | 'playing' | 'paused' | 'error'
+export type CrossfadeStatus = 'idle' | 'fading-out' | 'fading-in'
 
 interface PlayerStore {
   // State
@@ -12,6 +13,8 @@ interface PlayerStore {
   duration: number // total duration of current track in ms
   volume: number // 0-100
   error: string | null
+  isCrossfadeEnabled: boolean
+  crossfadeStatus: CrossfadeStatus
 
   // Actions
   setPlaybackState: (state: PlaybackState) => void
@@ -22,6 +25,8 @@ interface PlayerStore {
   setDuration: (ms: number) => void
   setVolume: (volume: number) => void
   setError: (message: string | null) => void
+  setCrossfadeEnabled: (enabled: boolean) => void
+  setCrossfadeStatus: (status: CrossfadeStatus) => void
   reset: () => void
 }
 
@@ -34,6 +39,8 @@ const initialState = {
   duration: 0,
   volume: 50,
   error: null,
+  isCrossfadeEnabled: true,
+  crossfadeStatus: 'idle' as CrossfadeStatus,
 }
 
 export const usePlayerStore = create<PlayerStore>((set) => ({
@@ -74,6 +81,17 @@ export const usePlayerStore = create<PlayerStore>((set) => ({
 
   setError: (error) => {
     set({ error, playbackState: error ? 'error' : 'idle' })
+  },
+
+  setCrossfadeEnabled: (isCrossfadeEnabled) => {
+    set({ isCrossfadeEnabled })
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('crossfade-enabled', JSON.stringify(isCrossfadeEnabled))
+    }
+  },
+
+  setCrossfadeStatus: (crossfadeStatus) => {
+    set({ crossfadeStatus })
   },
 
   reset: () => {

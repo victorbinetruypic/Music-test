@@ -34,9 +34,10 @@ export class RealSpotifyClient implements SpotifyClient {
   private async fetch<T>(
     endpoint: string,
     options: RequestInit = {},
-    retryCount: number = 0
+    context: { authRetries?: number; rateRetries?: number } = {}
   ): Promise<{ data: T | null; error: string | null }> {
-    const MAX_RETRIES = 1 // Only retry once after token refresh
+    const authRetries = context.authRetries ?? 0
+    const rateRetries = context.rateRetries ?? 0
 
     try {
       const response = await fetch(`${SPOTIFY_API_BASE}${endpoint}`, {
@@ -49,19 +50,22 @@ export class RealSpotifyClient implements SpotifyClient {
       })
 
       if (response.status === 401) {
-        // Token expired, try to refresh (but only once to prevent infinite recursion)
-        if (this.onTokenExpired && retryCount < MAX_RETRIES) {
+        if (this.onTokenExpired && authRetries < 1) {
           const newToken = await this.onTokenExpired()
           if (newToken) {
             this.accessToken = newToken
-            // Retry the request with incremented retry count
-            return this.fetch(endpoint, options, retryCount + 1)
+            return this.fetch(endpoint, options, { authRetries: authRetries + 1, rateRetries })
           }
         }
         return { data: null, error: 'Your session has expired. Please reconnect.' }
       }
 
       if (response.status === 429) {
+        if (rateRetries < 5) {
+          const retryAfter = Math.max(parseInt(response.headers.get('Retry-After') || '2', 10), 2)
+          await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000))
+          return this.fetch(endpoint, options, { authRetries, rateRetries: rateRetries + 1 })
+        }
         return { data: null, error: 'Too many requests. Please wait a moment and try again.' }
       }
 
@@ -154,6 +158,14 @@ export class RealSpotifyClient implements SpotifyClient {
         valence: f.valence,
         tempo: f.tempo,
         danceability: f.danceability,
+        key: f.key,
+        mode: f.mode,
+        loudness: f.loudness,
+        acousticness: f.acousticness,
+        instrumentalness: f.instrumentalness,
+        speechiness: f.speechiness,
+        liveness: f.liveness,
+        time_signature: f.time_signature,
       }))
 
     return { data: features, error: null }
