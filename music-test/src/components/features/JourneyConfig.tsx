@@ -21,6 +21,8 @@ import { fetchDiscoveryTracks } from '@/lib/discovery/discovery-service'
 import { findForgottenGems } from '@/lib/discovery/forgotten-gems'
 import type { Track, Journey, Mood, Duration } from '@/types'
 
+const TRACK_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+
 interface JourneyConfigProps {
   likedSongsCount: number
   onJourneyReady?: (journey: Journey) => void
@@ -56,7 +58,7 @@ export function JourneyConfig({
   const prefsLoaded = usePrefsStore((s) => s.isLoaded)
 
   // Audio features
-  const { progress: featuresProgress, fetchFeatures } = useAudioFeatures()
+  const { progress: featuresProgress, fetchFeatures, retryFailed } = useAudioFeatures()
 
   // Discovery tracking
   const discoveryHistory = usePrefsStore((s) => s.discoveryHistory)
@@ -68,6 +70,14 @@ export function JourneyConfig({
   const [savedPlaylistUrl, setSavedPlaylistUrl] = useState<string | null>(null)
   const [generationPhase, setGenerationPhase] = useState<string | null>(null)
   const generatingRef = useRef(false)
+
+  // Refresh library handler — clears caches so next generation re-fetches
+  const handleRefreshLibrary = useCallback(async () => {
+    const { clearTracksCache, clearAudioFeaturesCache } = await import('@/lib/storage')
+    await clearTracksCache()
+    await clearAudioFeaturesCache()
+    setTracks([])
+  }, [])
 
   // Load preferences on mount
   useEffect(() => {
@@ -86,7 +96,7 @@ export function JourneyConfig({
     }
   }, [prefsLoaded, lastMood, lastDuration, selectedMood, selectedDuration, setSelectedMood, setSelectedDuration])
 
-  // Load tracks and features
+  // Load tracks and features (checks IndexedDB cache first)
   const loadTracksAndFeatures = useCallback(async (): Promise<void> => {
     if (!spotifyClient) return
 
@@ -94,11 +104,25 @@ export function JourneyConfig({
     setError(null)
 
     try {
-      // Sample random pages from the library instead of loading everything.
-      // A journey only needs a diverse pool — 500 tracks is more than enough.
+      const { getCachedTracks, getTracksCacheTimestamp, cacheTracks } = await import('@/lib/storage')
+
+      // Check cache first
+      const cachedTracks = await getCachedTracks()
+      const cacheTs = await getTracksCacheTimestamp()
+      const cacheAge = cacheTs ? Date.now() - cacheTs : Infinity
+      const cacheValid = cachedTracks.length >= 50 && cacheAge < TRACK_CACHE_MAX_AGE_MS
+
+      if (cacheValid) {
+        setTracks(cachedTracks)
+        await fetchFeatures(cachedTracks, spotifyClient)
+        setIsLoadingTracks(false)
+        return
+      }
+
+      // Cache miss or stale — fetch from Spotify
       const limit = 50
       const totalPages = Math.ceil(likedSongsCount / limit)
-      const MAX_SAMPLE_TRACKS = 500
+      const MAX_SAMPLE_TRACKS = 250
       const pagesToFetch = Math.min(totalPages, Math.ceil(MAX_SAMPLE_TRACKS / limit))
 
       // Pick random page offsets spread across the library
@@ -126,6 +150,9 @@ export function JourneyConfig({
         await new Promise((resolve) => setTimeout(resolve, 500))
       }
 
+      // Persist to IndexedDB for next time
+      await cacheTracks(allTracks)
+
       setTracks(allTracks)
 
       // Fetch audio features
@@ -138,12 +165,6 @@ export function JourneyConfig({
     }
   }, [spotifyClient, likedSongsCount, fetchFeatures, setError])
 
-  // Load tracks when component mounts
-  useEffect(() => {
-    if (spotifyClient && tracks.length === 0 && !isLoadingTracks) {
-      loadTracksAndFeatures()
-    }
-  }, [spotifyClient, tracks.length, isLoadingTracks, loadTracksAndFeatures])
 
   // Handle mood change
   const handleMoodChange = (mood: Mood): void => {
@@ -159,7 +180,7 @@ export function JourneyConfig({
 
   // Generate journey
   const handleGenerate = useCallback(async (): Promise<void> => {
-    if (!selectedMood || !selectedDuration || !featuresProgress || featuresProgress.phase !== 'done' || !spotifyClient) {
+    if (!selectedMood || !selectedDuration || !spotifyClient) {
       return
     }
 
@@ -172,17 +193,23 @@ export function JourneyConfig({
     setGenerationPhase('Loading your library...')
 
     try {
-      // Get cached features
-      const { getAllCachedFeatures } = await import('@/lib/storage')
+      // Lazy-load: fetch tracks + features if not already loaded
+      if (tracks.length === 0 || !featuresProgress || featuresProgress.phase !== 'done') {
+        await loadTracksAndFeatures()
+      }
+
+      // Always read from cache to get the latest data (React state may be stale)
+      const { getAllCachedFeatures, getCachedTracks } = await import('@/lib/storage')
+      const currentTracks = await getCachedTracks()
       const cachedFeatures = await getAllCachedFeatures()
 
       // Combine tracks with features
       const featuresMap = createFeaturesMap(cachedFeatures)
-      const tracksWithFeatures = combineTracksWithFeatures(tracks, featuresMap)
+      const tracksWithFeatures = combineTracksWithFeatures(currentTracks, featuresMap)
 
       // Compute skip penalties for frequency reduction (Story 4.4)
       const skipPenalties = new Map<string, number>()
-      const trackIds = new Set(tracks.map((t) => t.id))
+      const trackIds = new Set(currentTracks.map((t) => t.id))
       for (const trackId of trackIds) {
         const penalty = calculatePenaltyScore(trackId, skipData)
         if (penalty > 0) {
@@ -231,7 +258,7 @@ export function JourneyConfig({
 
       // Find forgotten gems (pure client-side, no API calls)
       const gems = findForgottenGems({
-        allLikedTracks: tracks,
+        allLikedTracks: currentTracks,
         recentlyPlayedIds,
         mood: selectedMood,
         featuresMap,
@@ -281,7 +308,7 @@ export function JourneyConfig({
       setIsGenerating(false)
       setGenerationPhase(null)
     }
-  }, [selectedMood, selectedDuration, featuresProgress, tracks, exclusions, skipData, discoveryHistory, spotifyClient, setIsGenerating, setError, setJourney, onJourneyReady])
+  }, [selectedMood, selectedDuration, featuresProgress, tracks, exclusions, skipData, discoveryHistory, spotifyClient, setIsGenerating, setError, setJourney, onJourneyReady, loadTracksAndFeatures])
 
   // Save playlist to Spotify
   const handleSavePlaylist = useCallback(async (): Promise<void> => {
@@ -310,8 +337,8 @@ export function JourneyConfig({
     }
   }, [spotifyClient, currentJourney, setError])
 
-  // Loading state
-  if (isLoadingTracks || (featuresProgress && featuresProgress.phase === 'fetching')) {
+  // Loading state — only shown during generation (lazy loading)
+  if (isGenerating && (isLoadingTracks || (featuresProgress && featuresProgress.phase === 'fetching'))) {
     const progressPercent = featuresProgress
       ? (featuresProgress.current / featuresProgress.total) * 100
       : 0
@@ -338,6 +365,36 @@ export function JourneyConfig({
             style={{ width: `${progressPercent}%` }}
           />
         </div>
+      </div>
+    )
+  }
+
+  // Audio features failed — show error with retry
+  if (featuresProgress?.phase === 'error') {
+    return (
+      <div className="bg-[#181818] rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-[#e91429]/20 flex items-center justify-center">
+            <span className="text-[#e91429] text-xl">!</span>
+          </div>
+          <div>
+            <h2 className="font-bold text-white">Couldn&apos;t analyze your library</h2>
+            <p className="text-sm text-[#a7a7a7]">
+              {featuresProgress.error || 'Failed to load audio features from Spotify.'}
+            </p>
+            {featuresProgress.partialSuccess && (
+              <p className="text-xs text-[#6a6a6a] mt-1">
+                Completed {featuresProgress.partialSuccess.completedBatches} of {featuresProgress.partialSuccess.totalBatches} batches before the error.
+              </p>
+            )}
+          </div>
+        </div>
+        <Button
+          onClick={retryFailed}
+          className="w-full bg-[#282828] hover:bg-[#383838] text-white rounded-full py-4"
+        >
+          Retry
+        </Button>
       </div>
     )
   }
@@ -417,7 +474,7 @@ export function JourneyConfig({
   }
 
   // Configuration UI
-  const canGenerate = selectedMood && selectedDuration && featuresProgress?.phase === 'done'
+  const canGenerate = selectedMood && selectedDuration
 
   return (
     <div className="space-y-6">
@@ -459,6 +516,15 @@ export function JourneyConfig({
           Select a mood and duration to create your journey
         </p>
       )}
+
+      <button
+        type="button"
+        onClick={handleRefreshLibrary}
+        disabled={isGenerating}
+        className="w-full text-xs text-[#6a6a6a] hover:text-[#a7a7a7] transition-colors disabled:opacity-50"
+      >
+        Refresh library
+      </button>
     </div>
   )
 }

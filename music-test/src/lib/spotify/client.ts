@@ -9,7 +9,7 @@ import type {
   SpotifyRecentlyPlayedResponse,
 } from './types'
 import type { Track, AudioFeatures } from '@/types'
-import { enqueueRequest } from './request-queue'
+import { enqueueRequest, pauseQueue } from './request-queue'
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1'
 
@@ -79,8 +79,18 @@ export class RealSpotifyClient implements SpotifyClient {
       }
 
       if (response.status === 429) {
-        if (rateRetries < 5) {
-          const retryAfter = Math.max(parseInt(response.headers.get('Retry-After') || '2', 10), 2)
+        const retryAfter = Math.max(parseInt(response.headers.get('Retry-After') || '5', 10), 5)
+        console.warn(`[Spotify 429] Retry-After: ${retryAfter}s (${Math.round(retryAfter / 60)}min) for ${endpoint}`)
+        // Pause the entire queue so no other requests fire during backoff
+        pauseQueue(retryAfter)
+
+        // If Retry-After is over 60 seconds, this is a long ban — don't retry
+        if (retryAfter > 60) {
+          const hours = Math.ceil(retryAfter / 3600)
+          return { data: null, error: `Spotify has rate-limited this app for ~${hours} hour${hours > 1 ? 's' : ''}. Please wait and try again later. (Development mode apps have very low rate limits.)` }
+        }
+
+        if (rateRetries < 3) {
           await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000))
           return this.fetch(endpoint, options, { authRetries, rateRetries: rateRetries + 1 })
         }

@@ -100,8 +100,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   logout: () => {
     try {
       localStorage.removeItem(STORAGE_KEY)
+      sessionStorage.removeItem('spotify_profile')
     } catch {
-      // localStorage may be unavailable
+      // Storage may be unavailable
     }
     set({
       tokens: null,

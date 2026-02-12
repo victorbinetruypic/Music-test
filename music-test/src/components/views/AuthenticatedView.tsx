@@ -60,6 +60,26 @@ export function AuthenticatedView(): React.ReactElement {
     setIsLoadingProfile(true)
     setError(null)
 
+    // Check sessionStorage cache first to avoid API calls on refresh
+    const cachedProfile = sessionStorage.getItem('spotify_profile')
+    if (cachedProfile) {
+      try {
+        const parsed = JSON.parse(cachedProfile)
+        setUser({
+          id: parsed.id,
+          displayName: parsed.displayName,
+          likedSongsCount: parsed.likedSongsCount,
+        })
+        if (parsed.likedSongsCount !== null) {
+          setLikedSongsCount(parsed.likedSongsCount)
+        }
+        setIsLoadingProfile(false)
+        return
+      } catch {
+        // Corrupted cache, fall through to API
+      }
+    }
+
     const profileResult = await spotifyClient.getUserProfile()
     if (profileResult.error) {
       setError(profileResult.error)
@@ -84,6 +104,15 @@ export function AuthenticatedView(): React.ReactElement {
 
     if (countResult.data !== null) {
       setLikedSongsCount(countResult.data)
+    }
+
+    // Cache for session to avoid repeat API calls on refresh
+    if (profileResult.data && countResult.data !== null) {
+      sessionStorage.setItem('spotify_profile', JSON.stringify({
+        id: profileResult.data.id,
+        displayName: profileResult.data.displayName,
+        likedSongsCount: countResult.data,
+      }))
     }
 
     setIsLoadingProfile(false)

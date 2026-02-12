@@ -151,6 +151,13 @@ export async function getCachedTracks(): Promise<Track[]> {
   return entries.map((e) => e.track)
 }
 
+export async function getTracksCacheTimestamp(): Promise<number | null> {
+  const db = await getDB()
+  const entries = await db.getAll('tracks')
+  if (entries.length === 0) return null
+  return Math.min(...entries.map((e) => e.cachedAt))
+}
+
 export async function clearTracksCache(): Promise<void> {
   const db = await getDB()
   await db.clear('tracks')
