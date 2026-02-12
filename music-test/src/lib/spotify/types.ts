@@ -68,6 +68,27 @@ export interface SpotifyPlaylist {
   uri: string
 }
 
+export interface SpotifyRecommendationsResponse {
+  tracks: SpotifyTrack[]
+  seeds: Array<{
+    id: string
+    type: 'artist' | 'track' | 'genre'
+    initialPoolSize: number
+    afterFilteringSize: number
+    afterRelinkingSize: number
+  }>
+}
+
+export interface SpotifyRecentlyPlayedResponse {
+  items: Array<{
+    track: SpotifyTrack
+    played_at: string
+  }>
+  next: string | null
+  cursors: { after: string; before: string } | null
+  limit: number
+}
+
 export interface SpotifyError {
   error: {
     status: number

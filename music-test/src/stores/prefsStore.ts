@@ -12,8 +12,11 @@ import {
   addSkipEntry,
   getLastJourneySummary,
   saveLastJourneySummary,
+  getDiscoveryData,
+  addDiscoveryEntry,
   type SkipEntry,
   type LastJourneySummary,
+  type DiscoveryEntry,
 } from '@/lib/storage'
 
 interface PrefsStore {
@@ -24,6 +27,7 @@ interface PrefsStore {
   volume: number
   skipData: SkipEntry[]
   lastJourney: LastJourneySummary | null
+  discoveryHistory: DiscoveryEntry[]
   isLoaded: boolean
 
   // Actions
@@ -37,6 +41,7 @@ interface PrefsStore {
   recordSkip: (entry: Omit<SkipEntry, 'timestamp'>) => void
   getSkipCountForTrack: (trackId: string) => number
   saveCompletedJourney: (summary: LastJourneySummary) => void
+  recordDiscoveryOutcome: (entry: Omit<DiscoveryEntry, 'timestamp'>) => void
 }
 
 export const usePrefsStore = create<PrefsStore>((set, get) => ({
@@ -46,6 +51,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   volume: 50,
   skipData: [],
   lastJourney: null,
+  discoveryHistory: [],
   isLoaded: false,
 
   loadFromStorage: () => {
@@ -53,6 +59,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
     const prefs = getPreferences()
     const skipData = getSkipData()
     const lastJourney = getLastJourneySummary()
+    const discoveryHistory = getDiscoveryData()
 
     set({
       exclusions,
@@ -61,6 +68,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
       volume: prefs.volume,
       skipData,
       lastJourney,
+      discoveryHistory,
       isLoaded: true,
     })
   },
@@ -121,6 +129,17 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   saveCompletedJourney: (summary) => {
     saveLastJourneySummary(summary)
     set({ lastJourney: summary })
+  },
+
+  recordDiscoveryOutcome: (entry) => {
+    const fullEntry: DiscoveryEntry = {
+      ...entry,
+      timestamp: new Date().toISOString(),
+    }
+    addDiscoveryEntry(fullEntry)
+    set((state) => ({
+      discoveryHistory: [...state.discoveryHistory, fullEntry],
+    }))
   },
 }))
 

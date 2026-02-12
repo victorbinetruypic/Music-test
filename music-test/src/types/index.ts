@@ -8,6 +8,8 @@ export interface Track {
   album: string
   uri: string
   durationMs: number
+  isDiscovery?: boolean
+  isForgottenGem?: boolean
 }
 
 export interface AudioFeatures {

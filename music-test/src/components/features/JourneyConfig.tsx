@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { MoodPicker } from './MoodPicker'
@@ -15,7 +15,10 @@ import {
   combineTracksWithFeatures,
   createFeaturesMap,
   InsufficientSongsError,
+  filterTracksByMood,
 } from '@/lib/journey'
+import { fetchDiscoveryTracks } from '@/lib/discovery/discovery-service'
+import { findForgottenGems } from '@/lib/discovery/forgotten-gems'
 import type { Track, Journey, Mood, Duration } from '@/types'
 
 interface JourneyConfigProps {
@@ -55,11 +58,16 @@ export function JourneyConfig({
   // Audio features
   const { progress: featuresProgress, fetchFeatures } = useAudioFeatures()
 
+  // Discovery tracking
+  const discoveryHistory = usePrefsStore((s) => s.discoveryHistory)
+
   // Local state
   const [tracks, setTracks] = useState<Track[]>([])
   const [isLoadingTracks, setIsLoadingTracks] = useState(false)
   const [isSavingPlaylist, setIsSavingPlaylist] = useState(false)
   const [savedPlaylistUrl, setSavedPlaylistUrl] = useState<string | null>(null)
+  const [generationPhase, setGenerationPhase] = useState<string | null>(null)
+  const generatingRef = useRef(false)
 
   // Load preferences on mount
   useEffect(() => {
@@ -151,12 +159,17 @@ export function JourneyConfig({
 
   // Generate journey
   const handleGenerate = useCallback(async (): Promise<void> => {
-    if (!selectedMood || !selectedDuration || !featuresProgress || featuresProgress.phase !== 'done') {
+    if (!selectedMood || !selectedDuration || !featuresProgress || featuresProgress.phase !== 'done' || !spotifyClient) {
       return
     }
 
+    // Prevent concurrent generation (double-click / rapid re-trigger)
+    if (generatingRef.current) return
+    generatingRef.current = true
+
     setIsGenerating(true)
     setError(null)
+    setGenerationPhase('Loading your library...')
 
     try {
       // Get cached features
@@ -177,13 +190,82 @@ export function JourneyConfig({
         }
       }
 
-      // Generate journey
+      // Calculate how many discoveries to fetch
+      const avgSongDuration = 3.5
+      const durationMinutes = selectedDuration === 'open-ended' ? 180 : selectedDuration
+      const estimatedTracks = Math.round(durationMinutes / avgSongDuration)
+      const discoveryCount = Math.max(2, Math.floor(estimatedTracks * 0.2))
+
+      // Build exclude set: liked songs + exclusions + rejected discoveries
+      const excludeIds = new Set([...trackIds, ...exclusions])
+      if (discoveryHistory) {
+        for (const entry of discoveryHistory) {
+          if (entry.outcome === 'not-this') {
+            excludeIds.add(entry.trackId)
+          }
+        }
+        // Also exclude tracks skipped 3+ times
+        const skipCounts = new Map<string, number>()
+        for (const entry of discoveryHistory) {
+          if (entry.outcome === 'skipped') {
+            skipCounts.set(entry.trackId, (skipCounts.get(entry.trackId) ?? 0) + 1)
+          }
+        }
+        for (const [id, count] of skipCounts) {
+          if (count >= 3) excludeIds.add(id)
+        }
+      }
+
+      // Fetch recently played for forgotten gems (failure is non-fatal)
+      setGenerationPhase('Finding discoveries...')
+      const recentlyPlayedIds = new Set<string>()
+      const { data: recentlyPlayed, error: recentError } = await spotifyClient.getRecentlyPlayed(50)
+      if (recentError) {
+        console.warn('Could not fetch recently played:', recentError)
+      }
+      if (recentlyPlayed) {
+        for (const item of recentlyPlayed) {
+          recentlyPlayedIds.add(item.track.id)
+        }
+      }
+
+      // Find forgotten gems (pure client-side, no API calls)
+      const gems = findForgottenGems({
+        allLikedTracks: tracks,
+        recentlyPlayedIds,
+        mood: selectedMood,
+        featuresMap,
+        count: 2,
+      })
+
+      // Use mood-filtered tracks as seeds for better recommendations
+      const moodMatchedTracks = filterTracksByMood(tracksWithFeatures, selectedMood)
+
+      // Fetch discovery tracks (failure is non-fatal — journey works without them)
+      const { tracks: discoveryTracks, error: discoveryError } = await fetchDiscoveryTracks(
+        spotifyClient,
+        {
+          seedTracks: moodMatchedTracks.slice(0, 20),
+          mood: selectedMood,
+          count: discoveryCount,
+          excludeTrackIds: excludeIds,
+        }
+      )
+      if (discoveryError) {
+        console.warn('Discovery fetch degraded:', discoveryError)
+      }
+
+      setGenerationPhase('Creating journey...')
+
+      // Generate journey with discoveries and gems
       const result = generateJourney({
         tracks: tracksWithFeatures,
         mood: selectedMood,
         duration: selectedDuration,
         excludedTrackIds: exclusions,
         skipPenalties,
+        discoveryTracks: discoveryTracks.length > 0 ? discoveryTracks : undefined,
+        forgottenGems: gems.length > 0 ? gems : undefined,
       })
 
       setJourney(result.journey)
@@ -195,9 +277,11 @@ export function JourneyConfig({
         setError(err instanceof Error ? err.message : 'Failed to generate journey')
       }
     } finally {
+      generatingRef.current = false
       setIsGenerating(false)
+      setGenerationPhase(null)
     }
-  }, [selectedMood, selectedDuration, featuresProgress, tracks, exclusions, skipData, setIsGenerating, setError, setJourney, onJourneyReady])
+  }, [selectedMood, selectedDuration, featuresProgress, tracks, exclusions, skipData, discoveryHistory, spotifyClient, setIsGenerating, setError, setJourney, onJourneyReady])
 
   // Save playlist to Spotify
   const handleSavePlaylist = useCallback(async (): Promise<void> => {
@@ -363,7 +447,7 @@ export function JourneyConfig({
         {isGenerating ? (
           <div className="flex items-center gap-3">
             <span className="h-5 w-5 animate-spin rounded-full border-2 border-black border-t-transparent" />
-            <span>Creating your journey...</span>
+            <span>{generationPhase || 'Creating your journey...'}</span>
           </div>
         ) : (
           'Create Journey'

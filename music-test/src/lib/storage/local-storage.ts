@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   PREFERENCES: 'music-test-preferences',
   SKIP_DATA: 'music-test-skip-data',
   LAST_JOURNEY: 'music-test-last-journey',
+  DISCOVERY_DATA: 'music-test-discovery-data',
 } as const
 
 // Exclusion List ("Not This" songs)
@@ -199,5 +200,33 @@ export function clearLastJourneySummary(): void {
     localStorage.removeItem(STORAGE_KEYS.LAST_JOURNEY)
   } catch {
     // localStorage may be unavailable
+  }
+}
+
+// Discovery Tracking
+export interface DiscoveryEntry {
+  trackId: string
+  journeyId: string
+  outcome: 'played' | 'skipped' | 'not-this'
+  timestamp: string
+}
+
+export function getDiscoveryData(): DiscoveryEntry[] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.DISCOVERY_DATA)
+    if (!stored) return []
+    return JSON.parse(stored) as DiscoveryEntry[]
+  } catch {
+    return []
+  }
+}
+
+export function addDiscoveryEntry(entry: DiscoveryEntry): void {
+  const current = getDiscoveryData()
+  const updated = [...current, entry]
+  try {
+    localStorage.setItem(STORAGE_KEYS.DISCOVERY_DATA, JSON.stringify(updated))
+  } catch {
+    // localStorage may be full or unavailable
   }
 }

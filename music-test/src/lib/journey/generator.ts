@@ -56,8 +56,24 @@ export function generateJourney(input: GenerationInput): GenerationResult {
     })
   })
 
+  // Inject forgotten gems into the opening phase
+  const allInputTracks = [
+    ...input.tracks,
+    ...(input.discoveryTracks ?? []),
+    ...(input.forgottenGems ?? []),
+  ]
+  const featuresMap = buildFeaturesLookup(allInputTracks)
+
+  if (input.forgottenGems && input.forgottenGems.length > 0 && phases.length > 0) {
+    injectForgottenGems(allTracks, phases, input.forgottenGems, featuresMap)
+  }
+
+  // Inject discovery tracks using sandwich pattern
+  if (input.discoveryTracks && input.discoveryTracks.length > 0) {
+    injectDiscoveryTracks(allTracks, phases, input.discoveryTracks, featuresMap)
+  }
+
   // Optimize phase boundaries for smoother transitions
-  const featuresMap = buildFeaturesLookup(input.tracks)
   optimizePhaseBoundaries(allTracks, phases, featuresMap)
 
   // Calculate actual duration
@@ -201,4 +217,143 @@ export function createFeaturesMap(
     map.set(f.id, f)
   }
   return map
+}
+
+/**
+ * Inject forgotten gems into the opening phase by replacing tracks.
+ * Picks the gem with the best transition score to its neighbors.
+ */
+function injectForgottenGems(
+  allTracks: Track[],
+  phases: PhaseInfo[],
+  gems: TrackWithFeatures[],
+  featuresMap: Map<string, AudioFeatures>
+): void {
+  const openingPhase = phases[0]
+  if (!openingPhase || openingPhase.endIndex - openingPhase.startIndex < 2) return
+
+  // Replace up to 2 tracks in the opening phase (not index 0)
+  const maxGems = Math.min(gems.length, 2)
+
+  for (let g = 0; g < maxGems; g++) {
+    const gem = gems[g]
+    const gemFeatures = gem.features
+
+    // Find best replacement position (skip index 0)
+    let bestIdx = -1
+    let bestScore = -1
+
+    for (let i = openingPhase.startIndex + 1; i <= openingPhase.endIndex; i++) {
+      // Don't replace other gems we already placed
+      if (allTracks[i].isForgottenGem) continue
+
+      const prevFeatures = featuresMap.get(allTracks[i - 1].id)
+      const nextFeatures = i < allTracks.length - 1 ? featuresMap.get(allTracks[i + 1].id) : null
+
+      let score = 0
+      if (prevFeatures) score += scoreTransition(prevFeatures, gemFeatures)
+      if (nextFeatures) score += scoreTransition(gemFeatures, nextFeatures)
+
+      if (score > bestScore) {
+        bestScore = score
+        bestIdx = i
+      }
+    }
+
+    if (bestIdx >= 0) {
+      allTracks[bestIdx] = gem.track
+      // Update phase tracks
+      openingPhase.tracks = allTracks.slice(openingPhase.startIndex, openingPhase.endIndex + 1)
+    }
+  }
+}
+
+/**
+ * Inject discovery tracks using the sandwich pattern:
+ * - Never at index 0 or 1
+ * - Never in last 3 tracks
+ * - Always between two liked songs (no adjacent discoveries)
+ * - Max ~20% of the journey
+ */
+function injectDiscoveryTracks(
+  allTracks: Track[],
+  phases: PhaseInfo[],
+  discoveries: TrackWithFeatures[],
+  featuresMap: Map<string, AudioFeatures>
+): void {
+  if (allTracks.length < 6) return // too short for safe injection
+
+  // Max discoveries: ~20% of journey
+  const maxDiscoveries = Math.max(1, Math.floor(allTracks.length * 0.2))
+  const toInject = discoveries.slice(0, maxDiscoveries)
+
+  // Valid injection points: after index 1, before last 3, not adjacent to another injection
+  const injectedIndices = new Set<number>()
+
+  for (const disc of toInject) {
+    const discFeatures = disc.features
+    let bestIdx = -1
+    let bestScore = -1
+
+    // Safe range: index 2 to length-3
+    const maxIdx = allTracks.length - 3
+
+    for (let i = 2; i <= maxIdx; i++) {
+      // Skip if adjacent to another injection
+      if (injectedIndices.has(i - 1) || injectedIndices.has(i) || injectedIndices.has(i + 1)) continue
+
+      const prevFeatures = featuresMap.get(allTracks[i - 1].id)
+      const nextFeatures = featuresMap.get(allTracks[i].id)
+
+      if (!prevFeatures || !nextFeatures) continue
+
+      // Score how well the discovery fits between these two tracks
+      const score = scoreTransition(prevFeatures, discFeatures) + scoreTransition(discFeatures, nextFeatures)
+
+      if (score > bestScore) {
+        bestScore = score
+        bestIdx = i
+      }
+    }
+
+    if (bestIdx >= 0) {
+      // Insert discovery at bestIdx (push everything after it forward)
+      allTracks.splice(bestIdx, 0, disc.track)
+      injectedIndices.add(bestIdx)
+
+      // Shift all previously recorded indices that are >= bestIdx
+      const shifted = new Set<number>()
+      for (const idx of injectedIndices) {
+        shifted.add(idx >= bestIdx && idx !== bestIdx ? idx + 1 : idx)
+      }
+      injectedIndices.clear()
+      for (const idx of shifted) injectedIndices.add(idx)
+    }
+  }
+
+  // Rebuild phase info after insertions
+  rebuildPhases(allTracks, phases)
+}
+
+/**
+ * Rebuild phase boundaries after track insertions.
+ * Distributes tracks proportionally based on original phase ratios.
+ */
+function rebuildPhases(allTracks: Track[], phases: PhaseInfo[]): void {
+  const totalOriginal = phases.reduce((sum, p) => sum + (p.endIndex - p.startIndex + 1), 0)
+  const totalNow = allTracks.length
+
+  let cursor = 0
+  for (let i = 0; i < phases.length; i++) {
+    const originalCount = phases[i].endIndex - phases[i].startIndex + 1
+    const ratio = originalCount / totalOriginal
+    const newCount = i === phases.length - 1
+      ? totalNow - cursor // last phase gets remainder
+      : Math.max(1, Math.round(ratio * totalNow))
+
+    phases[i].startIndex = cursor
+    phases[i].endIndex = cursor + newCount - 1
+    phases[i].tracks = allTracks.slice(cursor, cursor + newCount)
+    cursor += newCount
+  }
 }

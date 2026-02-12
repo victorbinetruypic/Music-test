@@ -27,6 +27,8 @@ export interface GenerationInput {
   duration: Duration
   excludedTrackIds?: Set<string>
   skipPenalties?: Map<string, number> // trackId -> penalty score
+  discoveryTracks?: TrackWithFeatures[]
+  forgottenGems?: TrackWithFeatures[]
 }
 
 // Generation result

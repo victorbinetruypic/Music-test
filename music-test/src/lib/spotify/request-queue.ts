@@ -5,6 +5,7 @@
 
 const MAX_CONCURRENT = 3
 const MIN_SPACING_MS = 200 // Minimum ms between request starts
+const MAX_QUEUE_SIZE = 50
 
 interface QueuedRequest<T> {
   execute: () => Promise<T>
@@ -45,6 +46,10 @@ function processQueue(): void {
  */
 export function enqueueRequest<T>(execute: () => Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    if (queue.length >= MAX_QUEUE_SIZE) {
+      reject(new Error('Too many pending requests. Please wait.'))
+      return
+    }
     queue.push({ execute, resolve, reject } as QueuedRequest<unknown>)
     processQueue()
   })

@@ -72,6 +72,7 @@ export function usePlayer() {
 
   const recordSkip = usePrefsStore((s) => s.recordSkip)
   const addExclusion = usePrefsStore((s) => s.addExclusion)
+  const recordDiscoveryOutcome = usePrefsStore((s) => s.recordDiscoveryOutcome)
   const persistVolume = usePrefsStore((s) => s.setVolume)
   const savedVolume = usePrefsStore((s) => s.volume)
 
@@ -119,12 +120,22 @@ export function usePlayer() {
         const expectedTrackIndex = journeyTracksRef.current.indexOf(currentUri)
 
         if (expectedTrackIndex !== -1 && expectedTrackIndex !== currentTrackIndex) {
+          // Track advanced naturally — record 'played' for discovery tracks
+          const prevTrack = currentJourney.tracks[currentTrackIndex]
+          if (prevTrack?.isDiscovery && expectedTrackIndex === currentTrackIndex + 1) {
+            recordDiscoveryOutcome({
+              trackId: prevTrack.id,
+              journeyId: currentJourney.id,
+              outcome: 'played',
+            })
+          }
+
           setCurrentTrackIndex(expectedTrackIndex)
           getCrossfadeEngine()?.handleTrackChange(currentUri)
         }
       }
     },
-    [currentJourney, currentTrackIndex, setCurrentTrackIndex, setPlaybackState, setPosition, setDuration]
+    [currentJourney, currentTrackIndex, setCurrentTrackIndex, setPlaybackState, setPosition, setDuration, recordDiscoveryOutcome]
   )
 
   // Initialize player
@@ -244,6 +255,15 @@ export function usePlayer() {
         phase: phaseInfo?.phase ?? 'build',
         position,
       })
+
+      // Track discovery outcome
+      if (currentTrack.isDiscovery && currentJourney) {
+        recordDiscoveryOutcome({
+          trackId: currentTrack.id,
+          journeyId: currentJourney.id,
+          outcome: 'skipped',
+        })
+      }
     }
 
     if (currentTrackIndex >= currentJourney.tracks.length - 1) {
@@ -267,9 +287,18 @@ export function usePlayer() {
     const currentTrack = currentJourney.tracks[currentTrackIndex]
     if (currentTrack) {
       addExclusion(currentTrack.id)
+
+      if (currentTrack.isDiscovery) {
+        recordDiscoveryOutcome({
+          trackId: currentTrack.id,
+          journeyId: currentJourney.id,
+          outcome: 'not-this',
+        })
+      }
+
       await skip()
     }
-  }, [currentJourney, currentTrackIndex, addExclusion, skip])
+  }, [currentJourney, currentTrackIndex, addExclusion, recordDiscoveryOutcome, skip])
 
   const seekTo = useCallback(
     async (positionMs: number) => {

@@ -5,17 +5,32 @@ import type {
   SpotifyAudioFeatures,
   SpotifyPlaylist,
   SpotifyTrack,
+  SpotifyRecommendationsResponse,
+  SpotifyRecentlyPlayedResponse,
 } from './types'
 import type { Track, AudioFeatures } from '@/types'
 import { enqueueRequest } from './request-queue'
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1'
 
+export interface RecommendationOptions {
+  seedTrackIds: string[]
+  targetEnergy?: number
+  targetValence?: number
+  targetTempo?: number
+  targetDanceability?: number
+  maxPopularity?: number
+  limit?: number
+}
+
 export interface SpotifyClient {
   getUserProfile(): Promise<{ data: { id: string; displayName: string } | null; error: string | null }>
   getLikedSongsCount(): Promise<{ data: number | null; error: string | null }>
   getLikedSongs(limit?: number, offset?: number): Promise<{ data: Track[] | null; error: string | null }>
   getAudioFeatures(trackIds: string[]): Promise<{ data: AudioFeatures[] | null; error: string | null }>
+  getAudioFeaturesMap(trackIds: string[]): Promise<{ data: Map<string, AudioFeatures> | null; error: string | null }>
+  getRecommendations(options: RecommendationOptions): Promise<{ data: Track[] | null; error: string | null }>
+  getRecentlyPlayed(limit?: number): Promise<{ data: Array<{ track: Track; playedAt: string }> | null; error: string | null }>
   createPlaylist(name: string, trackUris: string[]): Promise<{ data: SpotifyPlaylist | null; error: string | null }>
 }
 
@@ -174,6 +189,64 @@ export class RealSpotifyClient implements SpotifyClient {
     return { data: features, error: null }
   }
 
+  async getAudioFeaturesMap(
+    trackIds: string[]
+  ): Promise<{ data: Map<string, AudioFeatures> | null; error: string | null }> {
+    const { data, error } = await this.getAudioFeatures(trackIds)
+    if (error || !data) {
+      return { data: null, error: error || 'Failed to load audio features' }
+    }
+    const map = new Map<string, AudioFeatures>()
+    for (const f of data) {
+      map.set(f.id, f)
+    }
+    return { data: map, error: null }
+  }
+
+  async getRecommendations(
+    options: RecommendationOptions
+  ): Promise<{ data: Track[] | null; error: string | null }> {
+    const params = new URLSearchParams({
+      seed_tracks: options.seedTrackIds.slice(0, 5).join(','),
+      limit: String(options.limit ?? 20),
+    })
+
+    if (options.targetEnergy !== undefined) params.set('target_energy', String(options.targetEnergy))
+    if (options.targetValence !== undefined) params.set('target_valence', String(options.targetValence))
+    if (options.targetTempo !== undefined) params.set('target_tempo', String(options.targetTempo))
+    if (options.targetDanceability !== undefined) params.set('target_danceability', String(options.targetDanceability))
+    if (options.maxPopularity !== undefined) params.set('max_popularity', String(options.maxPopularity))
+
+    const { data, error } = await this.fetch<SpotifyRecommendationsResponse>(
+      `/recommendations?${params.toString()}`
+    )
+
+    if (error || !data) {
+      return { data: null, error: error || 'Failed to get recommendations' }
+    }
+
+    const tracks: Track[] = data.tracks.map((t) => mapSpotifyTrack(t))
+    return { data: tracks, error: null }
+  }
+
+  async getRecentlyPlayed(
+    limit: number = 50
+  ): Promise<{ data: Array<{ track: Track; playedAt: string }> | null; error: string | null }> {
+    const { data, error } = await this.fetch<SpotifyRecentlyPlayedResponse>(
+      `/me/player/recently-played?limit=${Math.min(limit, 50)}`
+    )
+
+    if (error || !data) {
+      return { data: null, error: error || 'Failed to get recently played' }
+    }
+
+    const items = data.items.map((item) => ({
+      track: mapSpotifyTrack(item.track),
+      playedAt: item.played_at,
+    }))
+    return { data: items, error: null }
+  }
+
   async createPlaylist(
     name: string,
     trackUris: string[]
@@ -265,6 +338,21 @@ export class MockSpotifyClient implements SpotifyClient {
   async getAudioFeatures(trackIds: string[]): Promise<{ data: AudioFeatures[] | null; error: string | null }> {
     const features = this.mockFeatures.filter((f) => trackIds.includes(f.id))
     return { data: features, error: null }
+  }
+
+  async getAudioFeaturesMap(trackIds: string[]): Promise<{ data: Map<string, AudioFeatures> | null; error: string | null }> {
+    const features = this.mockFeatures.filter((f) => trackIds.includes(f.id))
+    const map = new Map<string, AudioFeatures>()
+    for (const f of features) map.set(f.id, f)
+    return { data: map, error: null }
+  }
+
+  async getRecommendations(): Promise<{ data: Track[] | null; error: string | null }> {
+    return { data: [], error: null }
+  }
+
+  async getRecentlyPlayed(): Promise<{ data: Array<{ track: Track; playedAt: string }> | null; error: string | null }> {
+    return { data: [], error: null }
   }
 
   async createPlaylist(): Promise<{ data: SpotifyPlaylist | null; error: string | null }> {
