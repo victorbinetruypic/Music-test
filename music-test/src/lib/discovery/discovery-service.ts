@@ -1,7 +1,14 @@
 import type { SpotifyClient } from '@/lib/spotify/client'
 import type { TrackWithFeatures } from '@/lib/journey/types'
-import type { Mood } from '@/types'
-import { getMoodThresholds } from '@/lib/journey/matcher'
+import type { Track, Mood } from '@/types'
+import { getMoodThresholds, calculateMoodMatchScore } from '@/lib/journey/matcher'
+import { buildTasteProfile, filterGenresForMood, selectSearchGenres } from './taste-profile'
+import {
+  getAllCachedArtistGenres,
+  getCachedDiscoveryCandidates,
+  cacheDiscoveryCandidates,
+} from '@/lib/storage/indexed-db'
+import { estimateAudioFeatures } from '@/lib/genre/feature-estimator'
 
 export interface DiscoveryOptions {
   seedTracks: TrackWithFeatures[]
@@ -18,111 +25,111 @@ export interface DiscoveryResult {
 }
 
 /**
- * Pick 5 diverse seed tracks spread across the energy range of the pool.
- */
-function pickDiverseSeeds(tracks: TrackWithFeatures[], count: number = 5): TrackWithFeatures[] {
-  if (tracks.length <= count) return [...tracks]
-
-  const sorted = [...tracks].sort((a, b) => a.features.energy - b.features.energy)
-  const step = (sorted.length - 1) / (count - 1)
-  const seeds: TrackWithFeatures[] = []
-
-  for (let i = 0; i < count; i++) {
-    seeds.push(sorted[Math.round(i * step)])
-  }
-  return seeds
-}
-
-/**
- * Fetch discovery tracks from Spotify's Recommendations API.
- * Picks diverse seeds, targets the mood's audio profile, and filters out known tracks.
+ * Fetch discovery tracks using Spotify's Search API and genre-based taste profiling.
  *
- * Makes 1 API call (getRecommendations). Audio features are estimated via
- * genre-based heuristics instead of calling the deprecated audio-features API.
- * Returns empty gracefully if recommendations API returns 403 (deprecated).
+ * 1. Build taste profile from cached artist genres
+ * 2. Filter genres by mood compatibility
+ * 3. Search Spotify for tracks in those genres
+ * 4. Estimate audio features and score by mood fit
+ * 5. Return top candidates as discovery tracks
+ *
+ * Uses a 24-hour cache for search results — repeated journeys with the same
+ * mood+genre hit 0 API calls.
  */
 export async function fetchDiscoveryTracks(
   client: SpotifyClient,
   options: DiscoveryOptions
 ): Promise<DiscoveryResult> {
-  const { seedTracks, mood, count, excludeTrackIds, maxPopularity = 70 } = options
-
-  if (seedTracks.length === 0) {
-    return { tracks: [], seeds: [] }
-  }
-
-  // Pick diverse seeds
-  const seeds = pickDiverseSeeds(seedTracks)
-  const seedIds = seeds.map((s) => s.track.id)
-
-  // Compute target features from mood thresholds
-  const thresholds = getMoodThresholds(mood)
-  const targetEnergy = (thresholds.energy[0] + thresholds.energy[1]) / 2
-  const targetValence = (thresholds.valence[0] + thresholds.valence[1]) / 2
-  const targetTempo = thresholds.tempo
-    ? (thresholds.tempo[0] + thresholds.tempo[1]) / 2
-    : undefined
-  const targetDanceability = thresholds.danceability
-    ? (thresholds.danceability[0] + thresholds.danceability[1]) / 2
-    : undefined
-
-  // Request more than needed so we can filter — capped at 100 (Spotify's max)
-  const requestLimit = Math.min(100, count * 3)
-
-  // API call 1: Get recommendations
-  // Note: Spotify deprecated /recommendations for new apps (Nov 2024).
-  // Catch 403 gracefully — discovery is optional, journey works without it.
-  let recommendedTracks: Awaited<ReturnType<typeof client.getRecommendations>>['data'] = null
-  let error: string | null = null
+  const { mood, count, excludeTrackIds, maxPopularity = 70 } = options
 
   try {
-    const result = await client.getRecommendations({
-      seedTrackIds: seedIds,
-      targetEnergy,
-      targetValence,
-      targetTempo,
-      targetDanceability,
-      maxPopularity,
-      limit: requestLimit,
-    })
-    recommendedTracks = result.data
-    error = result.error
-  } catch (err) {
-    console.warn('Recommendations API failed:', err)
-    return { tracks: [], seeds: seedIds, error: 'Recommendations unavailable' }
-  }
-
-  if (error) {
-    // 403 Forbidden = deprecated endpoint, not a transient error
-    if (error.includes('403') || error.includes('Forbidden') || error.includes('forbidden')) {
-      console.warn('Recommendations API returned 403 (deprecated). Returning empty discoveries.')
-      return { tracks: [], seeds: seedIds, error: 'Recommendations API deprecated for this app' }
+    // Step 1: Get artist genres from IndexedDB
+    const artistGenreMap = await getAllCachedArtistGenres()
+    if (artistGenreMap.size === 0) {
+      return { tracks: [], seeds: [], error: 'No artist genre data cached yet' }
     }
-    return { tracks: [], seeds: seedIds, error }
+
+    // Step 2: Build taste profile
+    const tasteProfile = buildTasteProfile(artistGenreMap)
+    if (tasteProfile.rankedGenres.length === 0) {
+      return { tracks: [], seeds: [] }
+    }
+
+    // Step 3: Filter genres by mood
+    const thresholds = getMoodThresholds(mood)
+    const moodGenres = filterGenresForMood(tasteProfile.rankedGenres, thresholds)
+    if (moodGenres.length === 0) {
+      return { tracks: [], seeds: [], error: 'No genres match this mood in your taste profile' }
+    }
+
+    // Step 4: Select top genres to search
+    const searchGenres = selectSearchGenres(moodGenres, 4)
+
+    // Step 5: Search for tracks in each genre (with caching)
+    const allCandidates: Array<{ track: Track; sourceGenre: string }> = []
+
+    for (const genre of searchGenres) {
+      const cacheKey = genre
+
+      // Check cache first
+      const cached = await getCachedDiscoveryCandidates(cacheKey)
+      if (cached) {
+        for (const track of cached) {
+          allCandidates.push({ track, sourceGenre: genre })
+        }
+        continue
+      }
+
+      // Cache miss — search Spotify
+      const query = `genre:"${genre}"`
+      const { data: tracks, error } = await client.searchTracks(query, 50)
+
+      if (error) {
+        console.warn(`[Discovery] Search failed for genre "${genre}":`, error)
+        continue
+      }
+
+      if (tracks && tracks.length > 0) {
+        // Cache the results
+        await cacheDiscoveryCandidates(cacheKey, tracks)
+        for (const track of tracks) {
+          allCandidates.push({ track, sourceGenre: genre })
+        }
+      }
+    }
+
+    if (allCandidates.length === 0) {
+      return { tracks: [], seeds: searchGenres }
+    }
+
+    // Step 6: Deduplicate, filter excluded, apply popularity filter
+    const seen = new Set<string>()
+    const filtered = allCandidates.filter(({ track }) => {
+      if (seen.has(track.id)) return false
+      if (excludeTrackIds.has(track.id)) return false
+      if (track.popularity !== undefined && track.popularity > maxPopularity) return false
+      seen.add(track.id)
+      return true
+    })
+
+    // Step 7: Estimate features and score by mood fit
+    const scored = filtered.map(({ track, sourceGenre }) => {
+      const features = estimateAudioFeatures(track, [sourceGenre])
+      const trackWithFeatures: TrackWithFeatures = {
+        track: { ...track, isDiscovery: true },
+        features,
+      }
+      const score = calculateMoodMatchScore(trackWithFeatures, mood)
+      return { trackWithFeatures, score }
+    })
+
+    // Step 8: Sort by mood match, take top count
+    scored.sort((a, b) => b.score - a.score)
+    const result = scored.slice(0, count).map((s) => s.trackWithFeatures)
+
+    return { tracks: result, seeds: searchGenres }
+  } catch (err) {
+    console.warn('[Discovery] Genre search failed:', err)
+    return { tracks: [], seeds: [], error: 'Discovery search failed' }
   }
-
-  if (!recommendedTracks || recommendedTracks.length === 0) {
-    return { tracks: [], seeds: seedIds }
-  }
-
-  // Filter out excluded tracks
-  const filtered = recommendedTracks.filter((t) => !excludeTrackIds.has(t.id))
-
-  // Limit to requested count (and never exceed 100 for the features batch)
-  const selected = filtered.slice(0, Math.min(count, 100))
-
-  if (selected.length === 0) {
-    return { tracks: [], seeds: seedIds }
-  }
-
-  // Estimate features for discovery tracks using genre estimation
-  // (audio-features API is deprecated for new apps)
-  const { estimateAudioFeatures } = await import('@/lib/genre/feature-estimator')
-
-  const tracksWithFeatures: TrackWithFeatures[] = selected.map((track) => ({
-    track: { ...track, isDiscovery: true },
-    features: estimateAudioFeatures(track, [], undefined),
-  }))
-
-  return { tracks: tracksWithFeatures, seeds: seedIds }
 }

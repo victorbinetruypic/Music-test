@@ -9,6 +9,7 @@ import type {
   SpotifyArtistsResponse,
   SpotifyRecommendationsResponse,
   SpotifyRecentlyPlayedResponse,
+  SpotifySearchResponse,
 } from './types'
 import type { Track, AudioFeatures } from '@/types'
 import { enqueueRequest, pauseQueue } from './request-queue'
@@ -33,6 +34,7 @@ export interface SpotifyClient {
   getAudioFeaturesMap(trackIds: string[]): Promise<{ data: Map<string, AudioFeatures> | null; error: string | null }>
   getRecommendations(options: RecommendationOptions): Promise<{ data: Track[] | null; error: string | null }>
   getArtists(artistIds: string[]): Promise<{ data: SpotifyArtist[] | null; error: string | null }>
+  searchTracks(query: string, limit?: number, offset?: number): Promise<{ data: Track[] | null; error: string | null }>
   getRecentlyPlayed(limit?: number): Promise<{ data: Array<{ track: Track; playedAt: string }> | null; error: string | null }>
   createPlaylist(name: string, trackUris: string[]): Promise<{ data: SpotifyPlaylist | null; error: string | null }>
 }
@@ -273,6 +275,30 @@ export class RealSpotifyClient implements SpotifyClient {
     return { data: tracks, error: null }
   }
 
+  async searchTracks(
+    query: string,
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<{ data: Track[] | null; error: string | null }> {
+    const params = new URLSearchParams({
+      q: query,
+      type: 'track',
+      limit: String(Math.min(limit, 50)),
+      offset: String(offset),
+    })
+
+    const { data, error } = await this.fetch<SpotifySearchResponse>(
+      `/search?${params.toString()}`
+    )
+
+    if (error || !data) {
+      return { data: null, error: error || 'Failed to search tracks' }
+    }
+
+    const tracks: Track[] = data.tracks.items.map((t) => mapSpotifyTrack(t))
+    return { data: tracks, error: null }
+  }
+
   async getRecentlyPlayed(
     limit: number = 50
   ): Promise<{ data: Array<{ track: Track; playedAt: string }> | null; error: string | null }> {
@@ -394,6 +420,10 @@ export class MockSpotifyClient implements SpotifyClient {
   }
 
   async getArtists(): Promise<{ data: SpotifyArtist[] | null; error: string | null }> {
+    return { data: [], error: null }
+  }
+
+  async searchTracks(): Promise<{ data: Track[] | null; error: string | null }> {
     return { data: [], error: null }
   }
 

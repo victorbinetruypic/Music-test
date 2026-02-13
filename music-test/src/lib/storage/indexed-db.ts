@@ -3,7 +3,7 @@ import { openDB, type IDBPDatabase } from 'idb'
 import type { AudioFeatures, Track } from '@/types'
 
 const DB_NAME = 'music-test'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 interface MusicTestDB {
   'audio-features': {
@@ -24,6 +24,10 @@ interface MusicTestDB {
     key: string
     value: ArtistGenresCacheEntry
   }
+  'discovery-candidates': {
+    key: string
+    value: DiscoveryCandidateCacheEntry
+  }
 }
 
 export interface AudioFeatureCacheEntry {
@@ -41,6 +45,12 @@ export interface TrackCacheEntry {
 export interface ArtistGenresCacheEntry {
   artistId: string
   genres: string[]
+  cachedAt: number
+}
+
+export interface DiscoveryCandidateCacheEntry {
+  key: string
+  tracks: Track[]
   cachedAt: number
 }
 
@@ -79,6 +89,11 @@ function getDB(): Promise<IDBPDatabase<MusicTestDB>> {
         // Artist genres store
         if (!db.objectStoreNames.contains('artist-genres')) {
           db.createObjectStore('artist-genres', { keyPath: 'artistId' })
+        }
+
+        // Discovery candidates store
+        if (!db.objectStoreNames.contains('discovery-candidates')) {
+          db.createObjectStore('discovery-candidates', { keyPath: 'key' })
         }
       },
     })
@@ -248,6 +263,48 @@ export async function clearArtistGenresCache(): Promise<void> {
   await db.clear('artist-genres')
 }
 
+// Discovery Candidates Cache
+const DISCOVERY_CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
+
+export async function getCachedDiscoveryCandidates(
+  key: string,
+  maxAgeMs: number = DISCOVERY_CACHE_TTL
+): Promise<Track[] | null> {
+  const db = await getDB()
+  const entry = await db.get('discovery-candidates', key)
+  if (!entry) return null
+  if (Date.now() - entry.cachedAt > maxAgeMs) return null
+  return entry.tracks
+}
+
+export async function cacheDiscoveryCandidates(
+  key: string,
+  tracks: Track[]
+): Promise<void> {
+  const db = await getDB()
+  await db.put('discovery-candidates', {
+    key,
+    tracks,
+    cachedAt: Date.now(),
+  })
+}
+
+export async function clearDiscoveryCandidatesCache(): Promise<void> {
+  const db = await getDB()
+  await db.clear('discovery-candidates')
+}
+
+// Get all cached artist genres (for taste profiling)
+export async function getAllCachedArtistGenres(): Promise<Map<string, string[]>> {
+  const db = await getDB()
+  const entries = await db.getAll('artist-genres')
+  const map = new Map<string, string[]>()
+  for (const entry of entries) {
+    map.set(entry.artistId, entry.genres)
+  }
+  return map
+}
+
 // Utility: Clear all caches
 export async function clearAllCaches(): Promise<void> {
   await Promise.all([
@@ -255,5 +312,6 @@ export async function clearAllCaches(): Promise<void> {
     clearTracksCache(),
     clearJourneyHistory(),
     clearArtistGenresCache(),
+    clearDiscoveryCandidatesCache(),
   ])
 }

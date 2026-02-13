@@ -101,6 +101,10 @@ export interface SpotifyRecentlyPlayedResponse {
   limit: number
 }
 
+export interface SpotifySearchResponse {
+  tracks: SpotifyPaginated<SpotifyTrack>
+}
+
 export interface SpotifyError {
   error: {
     status: number
