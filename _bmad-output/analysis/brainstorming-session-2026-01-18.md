@@ -1,13 +1,16 @@
 ---
 stepsCompleted: [1, 2, 3, 4]
 inputDocuments: []
-session_topic: 'Social music curation system - WhatsApp group song shares to personalized mood-based playlists'
-session_goals: 'Combat algo fatigue through friend-curated music, analyze shared songs and social signals, generate mood-based 2-hour playlists mixing discoveries with known favorites'
+session_topic: 'AI DJ Engine - personalized music journeys with smart discovery'
+session_goals: 'Combat algo fatigue through DJ-quality sequencing, audio-DNA discovery, and journey architecture'
 selected_approach: 'ai-recommended'
-techniques_used: ['Role Playing', 'Cross-Pollination', 'First Principles Thinking']
-ideas_generated: 40
+techniques_used: ['Role Playing', 'Cross-Pollination', 'First Principles Thinking', 'Chaos Engineering', 'Morphological Analysis']
+ideas_generated: 57
 context_file: ''
 session_active: false
+session_continued: true
+continuation_date: '2026-02-11'
+selected_config: 'Config 3: The Surprise'
 workflow_completed: true
 ---
 
@@ -231,80 +234,374 @@ Human curation filter (friends only share "great" songs they believe others will
 
 ---
 
-## Prioritization Results
+## Prioritization Results (Updated 2026-02-11)
 
-### Top Priority (Build First)
-1. **Journey Architecture** (#35, #22, #24) — This IS the product
-2. **MVP Core** (#34) — Spotify + WhatsApp scan + mood picker + journey
-3. **Three-Tier Feedback** (#4, #5) — Skip ≠ Dislike from day one
+> Supersedes original prioritization. Reflects insights from Chaos Engineering that killed WhatsApp dependency and elevated discovery engine.
 
-### Quick Wins (Low effort, high impact)
-1. **Narrative Arc** (#14) — Structure sets with build/peak/resolve
-2. **Purpose Framing** (#26) — "Your rainy evening journey" label
-3. **Finite Design** (#21) — Clear endpoint creates satisfaction
+### Theme Organization (62 insights across 7 themes)
 
-### Breakthrough Concepts (Differentiators)
-1. **"I Feel Great" Metric** (#19) — Transformation over engagement
-2. **Personalized DJ Personas** (#17) — YOUR rainy day DJ
-3. **Friends Filter, Algorithms Discover** (#30) — The positioning statement
+#### Theme 1: Journey Architecture (The Core Moat)
+
+| # | Insight | Key Point |
+|---|---------|-----------|
+| 14 | Narrative Arc Playlists | Build → peak → cool down |
+| 15 | Music as Guided Journey | "We lack magic because we shuffle" |
+| 22 | Live DJ Set Standard | Hours of deliberate curation |
+| 24 | Energy Management | When to push, when to breathe |
+| 35 | Non-Negotiable | Without this, you're another shuffler |
+| 47 | Same Ingredients, Different Chef | Spotify = grocery store, you = restaurant |
+| 48 | The Transition IS the Product | The 3 seconds between songs |
+
+#### Theme 2: Smart Discovery Engine
+
+| # | Insight | Key Point |
+|---|---------|-----------|
+| 44 | Discovery Without Friends | Spotify recommendations as discovery layer |
+| 49 | Discovery Wrapped in Trust | Earn trust first, THEN introduce unknowns |
+| 50 | Discovery Ratio Curve | 80/20 → 50/50 over time |
+| 51 | Placement is Everything | Sandwich: trusted → discovery → trusted |
+| 52 | Genre-Blind Discovery | Audio DNA crosses genre boundaries |
+| 53 | Audio DNA Fingerprint | Mood-specific taste profiles, not averages |
+| 54 | "How Did I Not Know This?" | Success = user checks artist name |
+| 59 | Bedroom Producer Moment | Low-popularity + audio match = explorer feeling |
+| 62 | Popularity Gradient | Safer discoveries early, bolder as trust builds |
+
+#### Theme 3: Controlled Chaos & Surprise
+
+| # | Insight | Key Point |
+|---|---------|-----------|
+| 55 | Controlled Chaos as Feature | Perfection is boring, curveballs are alive |
+| 56 | Recovery Track > Curveball | What comes AFTER the risk saves the moment |
+| 57 | Curveball Placement Strategy | Safe zones vs. danger zones in the arc |
+| 61 | Three Journey Dials | Nostalgia, Explorer, Serendipity — invisible to user |
+
+#### Theme 4: Emotional Anchors
+
+| # | Insight | Key Point |
+|---|---------|-----------|
+| 58 | The Forgotten Gem | Songs liked years ago, never played recently |
+| 60 | Transformation Summary | "Discovered 8 artists. Luna Mares releases Friday." |
+
+#### Theme 5: Product Foundation
+
+| # | Insight | Key Point |
+|---|---------|-----------|
+| 41 | Liked Songs ARE the Foundation | Always available, always sufficient |
+| 45 | Journey as Discovery Vehicle | Starts familiar, gradually introduces unknown |
+| 46 | Friends = Phase 2 | Social layer after core is proven |
+| 1 | The Shuffle Paradox | Context blindness is the real problem |
+| 28 | Surrender as Core UX | "Take me somewhere" — control available, not required |
+| 33 | Work Listening = Primary Use | Daily companion, not weekend app |
+
+#### Theme 6: Feedback & Learning
+
+| # | Insight | Key Point |
+|---|---------|-----------|
+| 4 | Three-Tier Feedback | Skip ≠ dislike |
+| 5 | Passive Learning + Override | Invisible learning, human override |
+| 20 | Learn from TikTok, Don't Become | Fast learning without addiction |
+| 21 | Finite by Design | Journey has an end — anti-TikTok |
+
+#### Theme 7: Future Vision (Phase 2+)
+
+| # | Insight | Key Point |
+|---|---------|-----------|
+| 42 | Friends as Ingredients | Simple toggle, not pipeline |
+| 43 | Two Modes of Friend Influence | Direct songs vs. inspired by taste |
+| 17 | Personalized DJ Personas | "Your rainy day DJ" |
+| 39 | Acquisition Strategy | Build what Spotify can't |
 
 ---
 
-## Action Plans
+## Action Plans — Config 3: "The Surprise"
 
-### Priority 1: Journey Architecture
+### BUILD NOW (extends current app)
 
-**Next Steps:**
-1. Research DJ set structures — collect 10-20 great sets and map their energy curves
-2. Define 3-4 journey templates (e.g., "Slow build to peak," "Waves of intensity")
-3. Map Spotify audio features to test songs — validate data matches feel
-4. Hand-craft one 2-hour journey from WhatsApp pool to prove concept
+#### Priority 1: Discovery Engine
+**What:** Use Spotify `/recommendations` with audio feature targets derived from liked songs
+**Steps:**
+1. Build mood-specific audio fingerprints from liked songs (cluster by energy/valence/tempo)
+2. Call `/recommendations` with seed tracks + target features + `max_popularity` for hidden gems
+3. Inject discoveries using sandwich pattern: trusted → discovery → trusted
+4. Track which discoveries get played through vs. skipped
 
-**Success Indicator:** Hand-crafted journey feels like a great DJ set
+**Success Indicator:** User discovers a song they add to their library within first 3 journeys
 
-### Priority 2: MVP Core
+#### Priority 2: Forgotten Gems
+**What:** Surface songs liked years ago but never played recently
+**Steps:**
+1. Query `/me/tracks` sorted by `added_at` — identify songs liked 1+ years ago
+2. Cross-reference with `/me/player/recently-played` to exclude recent plays
+3. Use as journey openers and emotional anchors
+4. Weight by how long ago they were liked (older = more powerful nostalgia)
 
-**Next Steps:**
-1. Spotify API setup — register app, test reading liked songs and audio features
-2. WhatsApp export parsing — extract Spotify/YouTube/SoundCloud links
-3. Simple mood picker — 4-6 moods (energetic, chill, melancholic, focused, uplifting, dark)
-4. Wire together: Mood → filter songs → apply journey template → output playlist
+**Success Indicator:** User has a "oh wow I forgot about this song" moment
 
-**Success Indicator:** Working prototype outputs structured playlist from friend pool
+#### Priority 3: Last-Played Mood Detection
+**What:** Replace manual mood picker with automatic vibe detection
+**Steps:**
+1. Fetch `/me/player/recently-played` (last 5-10 tracks)
+2. Get audio features for those tracks → derive current mood vector
+3. Offer "Continue my vibe" as default one-tap option alongside manual mood picker
+4. Compare generated mood vector against user's mood-specific fingerprints
 
-### Priority 3: Three-Tier Feedback System
+**Success Indicator:** Auto-detected mood matches what user would have selected manually 80%+ of the time
 
-**Next Steps:**
-1. Design exact signal definitions for Skip, "Not This," and Engage
-2. Build tracking for every skip with timestamp and context
-3. Implement contextual learning — skip position matters
-4. Review skip patterns after 10 sessions
+### BUILD NEXT (after core discovery works)
 
-**Success Indicator:** Skip rate decreases over first month
+#### Priority 4: Transformation Summary
+**What:** Post-journey screen with discovery stats and artist follow-ups
+**Steps:**
+1. Track all discovery tracks played through without skipping
+2. Fetch artist info for discovered artists
+3. Check for upcoming releases via `/artists/{id}/albums`
+4. Display: "You discovered X artists. [Name] releases new album [date]."
+5. Add "Play something like this journey" one-tap return
+
+**Success Indicator:** Users return to app more frequently after seeing upcoming releases
+
+#### Priority 5: Discovery Ratio Learning
+**What:** Gradually increase discovery ratio as user trust builds
+**Steps:**
+1. Track discovery acceptance rate per user (played through / total discoveries)
+2. Start at 80/20 (liked/discovery) ratio
+3. Increase discovery ratio by 5% for every 10 accepted discoveries
+4. Cap at 50/50 — never more discovery than familiar
+5. Implement popularity gradient: safer discoveries early in journey, bolder later
+
+**Success Indicator:** Average discovery ratio increases from 20% to 40% over first month
+
+#### Priority 6: Three Invisible Dials
+**What:** Internal parameters that shape journey personality, adjusted by behavior
+**Steps:**
+1. Nostalgia dial — controls forgotten gem frequency (based on engagement with old songs)
+2. Explorer dial — controls discovery obscurity level (based on acceptance of low-popularity tracks)
+3. Serendipity dial — controls curveball wildness (based on tolerance of audio-profile mismatches)
+4. All invisible to user — system adjusts based on behavioral signals
+
+**Success Indicator:** Each user's journeys develop a distinct personality over time
 
 ---
 
-## Session Summary and Insights
+## Session Summary and Insights (Updated 2026-02-11)
 
 ### Key Achievements
-- **40 breakthrough insights** generated for friend-curated music journey system
-- **6 organized themes** covering product core, UX, feedback, social, discovery, and strategy
-- **Clear MVP definition** with prioritized action plans
-- **Product manifesto crystallized:** "Treat music as a magical journey"
+- **62 breakthrough insights** across 2 sessions and 5 techniques
+- **7 organized themes** with clear implementation priorities
+- **Product pivot:** From friend-curated social music to AI DJ with smart discovery
+- **Config 3 "The Surprise" selected** as target product configuration
+- **Morphological grid documented** for future configuration exploration
+- **6 destruction scenarios survived** — product concept stress-tested and strengthened
 
 ### Creative Breakthroughs
-- **Friends filter, algorithms discover** — Reframed from "anti-algo" to "quality layer on top of algo"
-- **Journey architecture is the moat** — The non-negotiable differentiator from day one
-- **Success = "I feel great"** — Transformation over engagement as north star metric
-- **Acquisition strategy** — Build community + prove journey AI, become Spotify acquisition target
+- **WhatsApp is dead, long live audio DNA** — Friend curation demoted to Phase 2; discovery engine via audio feature matching replaces it
+- **Same ingredients, different chef** — Spotify has the songs AND the data; your value is the sequencing, the arc, the transitions
+- **Controlled chaos > perfection** — Occasional curveballs make journeys feel alive; recovery tracks matter more than the risk
+- **The Forgotten Gem** — Nostalgia from your own library is more powerful than any discovery
+- **Transformation Summary** — "Luna Mares releases Friday" turns journey endings into retention without manipulation
+- **Genre-blind discovery** — Audio DNA matching crosses musical worlds no human curator would connect
+
+### Product Evolution
+
+**Session 1 Vision (2026-01-18):**
+> WhatsApp group songs → mood-based playlists with friend curation
+
+**Session 2 Vision (2026-02-11):**
+> AI DJ engine that creates live-set experiences from your liked songs + genre-blind discoveries, with forgotten gems as emotional anchors and controlled chaos as a feature
 
 ### Product North Star
 
 > *"When the set finishes you are left wanting more, staying quiet thinking to yourself OMG what has just happened? This was magical."*
 
-### Session Reflections
+### What's Already Built
+- Journey architecture with energy arc phases (build → peak → cool down)
+- DJ engine: Camelot key matching, tempo bridging, 5-dimension transition scoring
+- Volume-based crossfade between tracks
+- Three-tier feedback (skip / not-this / engage)
+- Mood picker with 6 moods
+- Spotify liked songs integration with audio features
 
-This session moved from understanding the user pain point (algo fatigue, shuffle chaos) through stakeholder empathy, cross-domain inspiration, and finally to first principles clarity. The core insight: you're not building a playlist generator — you're building an AI DJ that crafts personalized live-set experiences from friend-curated music.
+### What's Next to Build
+1. Discovery engine (Spotify recommendations + audio DNA matching)
+2. Forgotten gems (old liked songs resurfaced)
+3. Last-played mood detection (auto-vibe)
+4. Transformation summary (post-journey screen)
+5. Discovery ratio learning (trust builds over time)
+6. Three invisible dials (nostalgia, explorer, serendipity)
 
-The validation approach (demanding friends → DJ professionals) ensures the product meets a high bar before scaling.
+---
+
+## Session Extension — 2026-02-11
+
+**Extension Techniques:** Chaos Engineering, Morphological Analysis, Dream Fusion Laboratory
+**Goal:** Stress-test assumptions, map solution space, push into ambitious territory
+
+---
+
+### Technique 4: Chaos Engineering
+
+**Focus:** Deliberately break the product concept to find what survives
+**Destruction Scenarios:** 6 tested
+
+**Key Insights Generated:**
+
+41. **Liked Songs ARE the Foundation** — The cold start problem kills friend-curation as the base. Liked songs are always available, always sufficient. Friends become Layer 2 enrichment, not the foundation.
+
+42. **Friends as Journey Ingredients, Not a Separate System** — Instead of building WhatsApp export pipelines, friends become a simple filter toggle on journey config. "Get inspiration from: Marco, Sarah."
+
+43. **Two Modes of Friend Influence** — Direct (include songs they shared) vs. Inspired (analyze their taste profile, find similar songs in YOUR library). The "Inspired" mode unlocks pockets of your own library you've been ignoring.
+
+44. **Discovery Without Friends** — Use Spotify's "Fans Also Like" and recommendation endpoints as the discovery layer. Liked songs define taste profile. Spotify's data finds the edges.
+
+45. **Journey as Discovery Vehicle** — Reframed: not "a journey through songs you love" but "a journey that starts in familiar territory and gradually introduces the unknown." Energy arc as trust-building structure.
+
+46. **Friend Layer Becomes Phase 2, Not MVP** — Friends were the original spark but not the minimum viable magic. Magic = journey architecture + smart discovery. Social layers on top once core is proven.
+
+47. **Same Ingredients, Different Chef** — Spotify is a grocery store. You're a restaurant. Same songs — the value is in sequencing, pacing, the arc. A DJ doesn't play better songs, they play the same songs in an order that creates an experience.
+
+48. **The Transition IS the Product** — Not about which songs. About what happens BETWEEN them. Camelot key matching, tempo bridging, energy arc, crossfade. That 3-second moment where one song melts into the next.
+
+49. **Discovery Wrapped in Trust** — Discover Weekly dumps 30 unknowns cold. Your app earns trust with familiar songs, gets you in flow state, THEN slips in a discovery that's key-matched and tempo-bridged. You don't notice it's new — you just feel it fits.
+
+50. **The Discovery Ratio Curve** — Early journeys: 80% liked, 20% discovery. As system learns which discoveries stick, ratio shifts. By month 3: 50/50. User never consciously decided to "explore more."
+
+51. **Discovery Placement is Everything** — Never open with unknown. Never stack discoveries. Sandwich: trusted → discovery → trusted. Familiar tracks are the safety net for risk-taking.
+
+52. **Genre-Blind Discovery** — Match on audio features (energy, tempo, key, valence) instead of genre/artist. A jazz track and electronic track with identical energy signatures can bridge musical worlds no human curator would connect.
+
+53. **Audio DNA Fingerprint** — Liked songs define a CLOUD of profiles across moods. "Chill" fingerprint differs from "workout" fingerprint. Discovery searches match against mood-specific fingerprint, not overall average.
+
+54. **The "How Did I Not Know This?" Moment** — Ultimate discovery success: user pauses, checks artist name, adds to library. Audio-profile matching maximizes these moments because the song FEELS right before you know why.
+
+55. **Controlled Chaos as a Feature** — 100% perfect matching is predictable and boring. Occasional left-field tracks make a live set feel alive. Tension-and-release IS the experience.
+
+56. **Recovery Track Matters More Than Curveball** — If a wild discovery lands badly, what saves it is the NEXT track. Always follow high-risk discovery with bulletproof familiar song. DJ engine already has tools for this.
+
+57. **Curveball Placement Strategy** — Safe zones: mid-journey builds (momentum carries through), right after peaks (user is euphoric/open). Danger zones: opening tracks (trust not earned), final 3-4 (don't ruin the landing). Sequencer needs a "discovery risk budget."
+
+---
+
+### Technique 5: Morphological Analysis
+
+**Focus:** Systematically map every product dimension and explore non-obvious combinations
+
+## Morphological Analysis Grid
+
+> **Reference document** — return here to explore alternative configurations
+
+### Dimension 1: Song Pool Source
+
+| Option | Description |
+|--------|-------------|
+| A | **Liked songs only** — User's existing Spotify library |
+| B | **Liked + audio-matched discoveries** — Core library + genre-blind Spotify recommendations |
+| C | **Liked + friend-shared (Phase 2)** — Core library + social layer when available |
+| D | **Liked + contextual pulls** — Songs from playlists the user follows but hasn't liked individually |
+| E | **Liked + listening history** — Include songs played repeatedly but never officially liked |
+
+### Dimension 2: Mood Detection
+
+| Option | Description |
+|--------|-------------|
+| A | **Manual mood picker** — User selects from 4-6 moods (current approach) |
+| B | **Time-of-day inference** — Morning = energize, evening = wind down, automatic |
+| C | **Last-played analysis** — Analyze what they listened to in the last hour as mood signal |
+| D | **Zero-input default** — System picks based on historical patterns ("Tuesdays at 8pm you usually want chill") |
+| E | **Mood arc picker** — Not a single mood but a trajectory ("start melancholic, end euphoric") |
+
+### Dimension 3: Journey Structure
+
+| Option | Description |
+|--------|-------------|
+| A | **Classic arc** — Build → peak → cool down |
+| B | **Wave pattern** — Multiple peaks and valleys like a DJ set |
+| C | **Flat sustained** — Maintain one energy level for focus/work |
+| D | **Narrative arc** — Tension → conflict → resolution (storytelling) |
+| E | **Freefall** — Start high energy, gradually descend into calm |
+
+### Dimension 4: Discovery Method
+
+| Option | Description |
+|--------|-------------|
+| A | **Audio DNA matching** — Energy, tempo, key, valence similarity |
+| B | **Artist graph proximity** — 2-3 degrees of separation from known artists |
+| C | **Curveball injection** — Deliberately wild picks for surprise |
+| D | **Collaborative filtering** — "Users with similar libraries also liked..." |
+| E | **Blend A+C** — Audio-matched with a controlled chaos budget |
+
+### Dimension 5: Feedback Loop
+
+| Option | Description |
+|--------|-------------|
+| A | **Three-tier (skip/not-this/engage)** — Existing design |
+| B | **Post-journey rating** — "How did that journey feel?" single score after completion |
+| C | **Passive only** — Only track skips and completions, never ask anything |
+| D | **Discovery tracking** — Specifically track which discoveries got liked/added |
+| E | **Journey-level learning** — Don't learn per song — learn which journey SHAPES work |
+
+### Dimension 6: Session Trigger
+
+| Option | Description |
+|--------|-------------|
+| A | **Manual open** — User decides to start a journey |
+| B | **Calendar integration** — "You have 2 hours free — journey ready?" |
+| C | **Daily ritual** — Same time every day, auto-suggested |
+| D | **Mood rescue** — Detect repeated skipping on Spotify → "Need a journey?" |
+| E | **One-tap return** — "Play something like last Tuesday's journey" |
+
+### Dimension 7: Completion Experience
+
+| Option | Description |
+|--------|-------------|
+| A | **Clean ending** — Last song fades, done |
+| B | **Journey summary** — "You traveled through 24 songs, discovered 5 new artists" |
+| C | **Save as playlist** — One tap to save the journey to Spotify |
+| D | **Afterglow track** — One final ultra-calm song as a cooldown ritual |
+| E | **Seed next journey** — "Based on what you loved today, tomorrow's journey will..." |
+
+---
+
+## Product Configurations
+
+### Config 1: "The Autopilot"
+
+| Dimension | Choice |
+|-----------|--------|
+| Song Pool | B — Liked + discoveries |
+| Mood | D — Zero-input default |
+| Structure | B — Wave pattern |
+| Discovery | E — Audio DNA + chaos |
+| Feedback | C — Passive only |
+| Trigger | C — Daily ritual |
+| Completion | E — Seed next journey |
+
+*You open the app every morning, tap nothing, and it plays. It learns silently. Each journey seeds the next. Maximum surrender.*
+
+### Config 2: "The Architect"
+
+| Dimension | Choice |
+|-----------|--------|
+| Song Pool | E — Liked + listening history |
+| Mood | E — Mood arc picker |
+| Structure | D — Narrative arc |
+| Discovery | A — Audio DNA matching |
+| Feedback | E — Journey-level learning |
+| Trigger | A — Manual open |
+| Completion | B — Journey summary |
+
+*User designs emotional trajectory. "Take me from anxious to peaceful." System builds narrative arc. Feedback about whether the SHAPE worked, not individual songs.*
+
+### Config 3: "The Surprise" (SELECTED)
+
+| Dimension | Choice |
+|-----------|--------|
+| Song Pool | B — Liked + discoveries |
+| Mood | C — Last-played analysis |
+| Structure | A — Classic arc |
+| Discovery | C — Curveball injection |
+| Feedback | D — Discovery tracking |
+| Trigger | E — One-tap return |
+| Completion | D — Afterglow track |
+
+*Reads current vibe from recent plays. Higher discovery ratio. "Show me something I didn't know I needed." Tracks which surprises become favorites. Afterglow cooldown ritual.*
 
