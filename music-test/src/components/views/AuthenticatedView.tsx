@@ -12,6 +12,7 @@ import { usePrefsStore } from '@/stores/prefsStore'
 import { useSpotifyClient } from '@/hooks/useSpotifyClient'
 import type { Journey } from '@/types'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { saveJourneyToHistory } from '@/lib/storage'
 import {
   SpotifyIcon, WaveformIcon, ErrorIcon, InfoIcon,
   ChevronLeftIcon, PlayIcon, MoodIcon, MusicNoteIcon, ClockIcon,
@@ -170,15 +171,29 @@ export function AuthenticatedView(): React.ReactElement {
     setViewState('config')
   }
 
-  const handleJourneyComplete = (): void => {
+  const handleJourneyComplete = async (): Promise<void> => {
     if (currentJourney) {
       const totalDuration = currentJourney.tracks.reduce((sum, t) => sum + t.durationMs, 0)
-      saveCompletedJourney({
+      const completedAt = new Date().toISOString()
+      const summary = {
         mood: currentJourney.mood,
         duration: Math.round(totalDuration / 60000),
         songCount: currentJourney.tracks.length,
-        completedAt: new Date().toISOString(),
-      })
+        completedAt,
+      }
+      saveCompletedJourney(summary)
+      try {
+        await saveJourneyToHistory({
+          id: currentJourney.id,
+          mood: currentJourney.mood,
+          duration: summary.duration,
+          songCount: summary.songCount,
+          completedAt,
+          trackIds: currentJourney.tracks.map((t) => t.id),
+        })
+      } catch {
+        // Non-fatal: history is best-effort
+      }
     }
     clearInterruptedJourney()
   }

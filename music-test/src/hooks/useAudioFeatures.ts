@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 
 import type { Track, AudioFeatures } from '@/types'
 import type { SpotifyClient } from '@/lib/spotify'
@@ -9,6 +9,9 @@ import {
   getCacheTimestamp,
   getCachedArtistGenres,
   cacheArtistGenres,
+  getAllCachedArtistGenres,
+  getArtistGenresRefreshTimestamp,
+  setArtistGenresRefreshTimestamp,
 } from '@/lib/storage'
 import { estimateAudioFeatures } from '@/lib/genre/feature-estimator'
 
@@ -28,6 +31,10 @@ export interface UseAudioFeaturesResult {
   retryFailed: () => Promise<void>
 }
 
+const GENRE_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000
+const MIN_GENRE_CACHE_SIZE = 20
+const MAX_GENRE_ARTISTS_PER_REFRESH = 50
+
 export function useAudioFeatures(): UseAudioFeaturesResult {
   const [features, setFeatures] = useState<AudioFeatures[]>([])
   const [isCached, setIsCached] = useState(false)
@@ -35,6 +42,50 @@ export function useAudioFeatures(): UseAudioFeaturesResult {
   const [progress, setProgress] = useState<FetchProgress | null>(null)
   const [pendingTracks, setPendingTracks] = useState<Track[]>([])
   const [pendingClient, setPendingClient] = useState<SpotifyClient | null>(null)
+  const warmingGenresRef = useRef(false)
+
+  const maybeWarmArtistGenres = useCallback(
+    async (tracks: Track[], client: SpotifyClient): Promise<void> => {
+      try {
+        if (warmingGenresRef.current) return
+
+        const lastRefresh = getArtistGenresRefreshTimestamp()
+        if (lastRefresh && Date.now() - lastRefresh < GENRE_REFRESH_INTERVAL_MS) {
+          return
+        }
+
+        const existingGenres = await getAllCachedArtistGenres()
+        if (existingGenres.size >= MIN_GENRE_CACHE_SIZE) {
+          return
+        }
+
+        const artistIds = [...new Set(tracks.map((t) => t.artistId).filter(Boolean))]
+        const uncachedArtistIds = artistIds.filter((id) => !existingGenres.has(id))
+        const batch = uncachedArtistIds.slice(0, MAX_GENRE_ARTISTS_PER_REFRESH)
+        if (batch.length === 0) return
+
+        warmingGenresRef.current = true
+        const { data: artists, error } = await client.getArtists(batch)
+        warmingGenresRef.current = false
+        setArtistGenresRefreshTimestamp(Date.now())
+
+        if (error) {
+          console.warn('Failed to warm artist genres:', error)
+          return
+        }
+
+        if (artists && artists.length > 0) {
+          await cacheArtistGenres(
+            artists.map((a) => ({ artistId: a.id, genres: a.genres }))
+          )
+        }
+      } catch (err) {
+        console.warn('Failed to warm artist genres:', err)
+        warmingGenresRef.current = false
+      }
+    },
+    []
+  )
 
   const fetchFeatures = useCallback(
     async (tracks: Track[], client: SpotifyClient): Promise<AudioFeatures[]> => {
@@ -56,6 +107,7 @@ export function useAudioFeatures(): UseAudioFeaturesResult {
         setIsCached(true)
         setCacheTimestamp(timestamp)
         setProgress({ current: tracks.length, total: tracks.length, phase: 'done' })
+        await maybeWarmArtistGenres(tracks, client)
         return cached
       }
 
@@ -93,6 +145,7 @@ export function useAudioFeatures(): UseAudioFeaturesResult {
             await cacheArtistGenres(
               artists.map((a) => ({ artistId: a.id, genres: a.genres }))
             )
+            setArtistGenresRefreshTimestamp(Date.now())
             // Add to local map
             for (const artist of artists) {
               cachedGenres.set(artist.id, artist.genres)
@@ -156,7 +209,7 @@ export function useAudioFeatures(): UseAudioFeaturesResult {
         return cached
       }
     },
-    []
+    [maybeWarmArtistGenres]
   )
 
   const retryFailed = useCallback(async (): Promise<void> => {

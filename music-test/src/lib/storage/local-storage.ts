@@ -6,6 +6,8 @@ const STORAGE_KEYS = {
   SKIP_DATA: 'music-test-skip-data',
   LAST_JOURNEY: 'music-test-last-journey',
   DISCOVERY_DATA: 'music-test-discovery-data',
+  ARTIST_GENRES_REFRESH: 'music-test-artist-genres-refresh',
+  LIBRARY_REFRESH: 'music-test-library-refresh',
 } as const
 
 // Exclusion List ("Not This" songs)
@@ -103,6 +105,46 @@ export function savePreferences(prefs: Partial<UserPreferences>): void {
 export function clearPreferences(): void {
   try {
     localStorage.removeItem(STORAGE_KEYS.PREFERENCES)
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
+// Artist genres refresh timestamp (rate-limit guard)
+export function getArtistGenresRefreshTimestamp(): number | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.ARTIST_GENRES_REFRESH)
+    if (!stored) return null
+    const ts = Number(stored)
+    return Number.isFinite(ts) ? ts : null
+  } catch {
+    return null
+  }
+}
+
+export function setArtistGenresRefreshTimestamp(timestamp: number): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.ARTIST_GENRES_REFRESH, String(timestamp))
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
+// Library refresh timestamp (rate-limit guard)
+export function getLibraryRefreshTimestamp(): number | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.LIBRARY_REFRESH)
+    if (!stored) return null
+    const ts = Number(stored)
+    return Number.isFinite(ts) ? ts : null
+  } catch {
+    return null
+  }
+}
+
+export function setLibraryRefreshTimestamp(timestamp: number): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.LIBRARY_REFRESH, String(timestamp))
   } catch {
     // localStorage may be unavailable
   }

@@ -31,11 +31,6 @@ export class RealPlayerService implements PlayerService {
     this.token = token
     this.callbacks = callbacks
 
-    // Load SDK script if not already loaded
-    if (!window.Spotify) {
-      await this.loadSDKScript()
-    }
-
     return new Promise((resolve) => {
       const initPlayer = () => {
         if (!window.Spotify) {
@@ -108,9 +103,16 @@ export class RealPlayerService implements PlayerService {
 
       if (window.Spotify) {
         initPlayer()
-      } else {
-        window.onSpotifyWebPlaybackSDKReady = initPlayer
+        return
       }
+
+      // Register callback before loading the script to avoid SDK-ready race
+      window.onSpotifyWebPlaybackSDKReady = initPlayer
+
+      this.loadSDKScript().catch((error) => {
+        callbacks.onError?.({ message: error instanceof Error ? error.message : 'Spotify SDK failed to load' })
+        resolve(false)
+      })
     })
   }
 

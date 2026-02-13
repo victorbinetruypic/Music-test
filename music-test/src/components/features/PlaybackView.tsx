@@ -39,6 +39,7 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
   // "Not This" confirmation state
   const [showNotThisConfirm, setShowNotThisConfirm] = useState(false)
   const notThisTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const hasReportedCompleteRef = useRef(false)
 
   // Pause playback when exiting
   const handleExit = useCallback(async () => {
@@ -75,6 +76,11 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
   }, [])
 
   const currentTrack = getCurrentTrack(currentJourney, currentTrackIndex)
+
+  // Reset completion guard when a new journey loads
+  useEffect(() => {
+    hasReportedCompleteRef.current = false
+  }, [currentJourney])
 
   // Debounced seek state
   const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -114,9 +120,16 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
 
   // Handle journey completion
   useEffect(() => {
-    if (isJourneyComplete) {
-      onComplete?.()
+    if (!isJourneyComplete) {
+      return
     }
+
+    if (hasReportedCompleteRef.current) {
+      return
+    }
+
+    hasReportedCompleteRef.current = true
+    onComplete?.()
   }, [isJourneyComplete, onComplete])
 
   // Start playback when ready

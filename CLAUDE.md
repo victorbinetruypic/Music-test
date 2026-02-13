@@ -24,6 +24,7 @@
 - All API calls go through the request queue (`request-queue.ts`) — serial, 1s spacing, global 429 pause
 - Tracks and audio features are cached in IndexedDB to minimize API calls
 - User profile is cached in sessionStorage to avoid /me calls on page refresh
+- Auto-refresh must stay conservative: ≤100 liked songs/day and ≤50 artists/day, gated to 24h, to avoid dev-mode bans
 
 ## Tech Stack
 - Next.js 16 (App Router, Turbopack), React 19, TypeScript

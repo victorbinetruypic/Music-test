@@ -22,6 +22,8 @@ import { findForgottenGems } from '@/lib/discovery/forgotten-gems'
 import type { Track, Journey, Mood, Duration } from '@/types'
 
 const TRACK_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+const AUTO_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000
+const AUTO_REFRESH_MAX_SAMPLE_TRACKS = 100
 
 interface JourneyConfigProps {
   likedSongsCount: number
@@ -97,14 +99,21 @@ export function JourneyConfig({
   }, [prefsLoaded, lastMood, lastDuration, selectedMood, selectedDuration, setSelectedMood, setSelectedDuration])
 
   // Load tracks and features (checks IndexedDB cache first)
-  const loadTracksAndFeatures = useCallback(async (): Promise<void> => {
+  const loadTracksAndFeatures = useCallback(async (
+    options?: { maxSampleTracks?: number; markRefresh?: boolean }
+  ): Promise<void> => {
     if (!spotifyClient) return
 
     setIsLoadingTracks(true)
     setError(null)
 
     try {
-      const { getCachedTracks, getTracksCacheTimestamp, cacheTracks } = await import('@/lib/storage')
+      const {
+        getCachedTracks,
+        getTracksCacheTimestamp,
+        cacheTracks,
+        setLibraryRefreshTimestamp,
+      } = await import('@/lib/storage')
 
       // Check cache first
       const cachedTracks = await getCachedTracks()
@@ -122,8 +131,15 @@ export function JourneyConfig({
       // Cache miss or stale — fetch from Spotify
       const limit = 50
       const totalPages = Math.ceil(likedSongsCount / limit)
-      const MAX_SAMPLE_TRACKS = 250
-      const pagesToFetch = Math.min(totalPages, Math.ceil(MAX_SAMPLE_TRACKS / limit))
+      const maxSampleTracks = Math.max(
+        limit,
+        Math.min(options?.maxSampleTracks ?? 250, likedSongsCount)
+      )
+      const pagesToFetch = Math.min(totalPages, Math.ceil(maxSampleTracks / limit))
+
+      if (options?.markRefresh) {
+        setLibraryRefreshTimestamp(Date.now())
+      }
 
       // Pick random page offsets spread across the library
       const allOffsets = Array.from({ length: totalPages }, (_, i) => i * limit)
@@ -193,13 +209,41 @@ export function JourneyConfig({
     setGenerationPhase('Loading your library...')
 
     try {
-      // Lazy-load: fetch tracks + features if not already loaded
-      if (tracks.length === 0 || !featuresProgress || featuresProgress.phase !== 'done') {
-        await loadTracksAndFeatures()
+      // Always read from cache to get the latest data (React state may be stale)
+      const {
+        getAllCachedFeatures,
+        getCachedTracks,
+        getTracksCacheTimestamp,
+        getAllCachedArtistGenres,
+        getLibraryRefreshTimestamp,
+        getJourneyHistory,
+      } = await import('@/lib/storage')
+
+      const cacheTs = await getTracksCacheTimestamp()
+      const cacheAge = cacheTs ? Date.now() - cacheTs : Infinity
+      const cacheStale = cacheAge > TRACK_CACHE_MAX_AGE_MS
+      const cachedGenres = await getAllCachedArtistGenres()
+      const genresMissing = cachedGenres.size === 0
+      const lastLibraryRefresh = getLibraryRefreshTimestamp()
+      const canAutoRefresh =
+        !lastLibraryRefresh || Date.now() - lastLibraryRefresh > AUTO_REFRESH_INTERVAL_MS
+
+      const needsInitialLoad =
+        tracks.length === 0 || !featuresProgress || featuresProgress.phase !== 'done'
+
+      // Lazy-load or auto-refresh if cache is stale, but rate-limit background refreshes
+      if (needsInitialLoad) {
+        await loadTracksAndFeatures({
+          maxSampleTracks: AUTO_REFRESH_MAX_SAMPLE_TRACKS,
+          markRefresh: true,
+        })
+      } else if ((cacheStale || genresMissing) && canAutoRefresh) {
+        await loadTracksAndFeatures({
+          maxSampleTracks: AUTO_REFRESH_MAX_SAMPLE_TRACKS,
+          markRefresh: true,
+        })
       }
 
-      // Always read from cache to get the latest data (React state may be stale)
-      const { getAllCachedFeatures, getCachedTracks } = await import('@/lib/storage')
       const currentTracks = await getCachedTracks()
       const cachedFeatures = await getAllCachedFeatures()
 
@@ -220,8 +264,27 @@ export function JourneyConfig({
       // Calculate how many discoveries to fetch
       const avgSongDuration = 3.5
       const durationMinutes = selectedDuration === 'open-ended' ? 180 : selectedDuration
-      const estimatedTracks = Math.round(durationMinutes / avgSongDuration)
+      const estimatedTracks = Math.max(10, Math.round(durationMinutes / avgSongDuration))
       const discoveryCount = Math.max(2, Math.floor(estimatedTracks * 0.2))
+
+      // Reduce repeats: exclude tracks from the most recent journey if pool allows
+      const recentHistory = await getJourneyHistory(1)
+      const recentTrackIds = new Set<string>(
+        recentHistory.flatMap((entry) => entry.trackIds ?? [])
+      )
+      const recentExclusions = new Set<string>()
+      if (recentTrackIds.size > 0) {
+        const minPoolAfterExclusions = Math.max(30, estimatedTracks + 10)
+        if (currentTracks.length - recentTrackIds.size >= minPoolAfterExclusions) {
+          for (const id of recentTrackIds) recentExclusions.add(id)
+        } else {
+          // If the pool is tight, softly penalize recent tracks instead of excluding
+          for (const id of recentTrackIds) {
+            const currentPenalty = skipPenalties.get(id) ?? 0
+            skipPenalties.set(id, Math.max(currentPenalty, 1))
+          }
+        }
+      }
 
       // Build exclude set: liked songs + exclusions + rejected discoveries
       const excludeIds = new Set([...trackIds, ...exclusions])
@@ -264,6 +327,7 @@ export function JourneyConfig({
         featuresMap,
         count: 2,
       })
+      const filteredGems = gems.filter((g) => !recentExclusions.has(g.track.id))
 
       // Use mood-filtered tracks as seeds for better recommendations
       const moodMatchedTracks = filterTracksByMood(tracksWithFeatures, selectedMood)
@@ -285,14 +349,15 @@ export function JourneyConfig({
       setGenerationPhase('Creating journey...')
 
       // Generate journey with discoveries and gems
+      const generatorExclusions = new Set<string>([...exclusions, ...recentExclusions])
       const result = generateJourney({
         tracks: tracksWithFeatures,
         mood: selectedMood,
         duration: selectedDuration,
-        excludedTrackIds: exclusions,
+        excludedTrackIds: generatorExclusions,
         skipPenalties,
         discoveryTracks: discoveryTracks.length > 0 ? discoveryTracks : undefined,
-        forgottenGems: gems.length > 0 ? gems : undefined,
+        forgottenGems: filteredGems.length > 0 ? filteredGems : undefined,
       })
 
       setJourney(result.journey)
