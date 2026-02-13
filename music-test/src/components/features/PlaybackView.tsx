@@ -40,6 +40,14 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
   const [showNotThisConfirm, setShowNotThisConfirm] = useState(false)
   const notThisTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Pause playback when exiting
+  const handleExit = useCallback(async () => {
+    if (playbackState === 'playing') {
+      await togglePlayback()
+    }
+    onExit?.()
+  }, [playbackState, togglePlayback, onExit])
+
   // Handle "Not This" action
   const handleNotThis = useCallback(async () => {
     await markNotThis()
@@ -142,7 +150,7 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
           )}
           <Button
             variant="ghost"
-            onClick={onExit}
+            onClick={handleExit}
             className="text-[#a7a7a7] hover:text-white hover:bg-[#282828] rounded-full"
           >
             Go Back
@@ -187,7 +195,7 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
           </Button>
           <Button
             variant="ghost"
-            onClick={onExit}
+            onClick={handleExit}
             className="text-[#a7a7a7] hover:text-white hover:bg-[#282828] rounded-full"
           >
             Go Back
@@ -257,14 +265,14 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
 
         <div className="flex flex-col gap-3">
           <Button
-            onClick={onExit}
+            onClick={handleExit}
             className="bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-full py-6"
           >
             Start New Journey
           </Button>
           <Button
             variant="ghost"
-            onClick={onExit}
+            onClick={handleExit}
             className="text-[#a7a7a7] hover:text-white hover:bg-[#282828] rounded-full"
           >
             Done
@@ -375,7 +383,7 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
       <Button
         variant="ghost"
         className="w-full text-[#a7a7a7] hover:text-white hover:bg-[#282828] rounded-full"
-        onClick={onExit}
+        onClick={handleExit}
       >
         Exit Journey
       </Button>
