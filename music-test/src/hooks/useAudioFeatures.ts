@@ -7,21 +7,16 @@ import {
   cacheAudioFeatures,
   getAllCachedFeatures,
   getCacheTimestamp,
+  getCachedArtistGenres,
+  cacheArtistGenres,
 } from '@/lib/storage'
-
-const BATCH_SIZE = 100
-const BATCH_DELAY_MS = 500 // Delay between batches to avoid rate limiting
+import { estimateAudioFeatures } from '@/lib/genre/feature-estimator'
 
 export interface FetchProgress {
   current: number
   total: number
-  phase: 'loading' | 'fetching' | 'caching' | 'done' | 'error'
+  phase: 'loading' | 'fetching-genres' | 'estimating' | 'caching' | 'done' | 'error'
   error?: string
-  partialSuccess?: {
-    completedBatches: number
-    totalBatches: number
-    failedBatch: number
-  }
 }
 
 export interface UseAudioFeaturesResult {
@@ -55,7 +50,7 @@ export function useAudioFeatures(): UseAudioFeaturesResult {
       const { cached, uncached } = await getCachedAudioFeatures(trackIds)
 
       if (uncached.length === 0) {
-        // All features are cached
+        // All features are cached (either from API or previous estimation)
         const timestamp = await getCacheTimestamp()
         setFeatures(cached)
         setIsCached(true)
@@ -64,92 +59,102 @@ export function useAudioFeatures(): UseAudioFeaturesResult {
         return cached
       }
 
-      // Need to fetch some features
+      // Need to estimate features for uncached tracks
+      const uncachedTracks = tracks.filter((t) => uncached.includes(t.id))
+
+      // Store for potential retry
+      setPendingTracks(uncachedTracks)
+      setPendingClient(client)
+
       setProgress({
         current: cached.length,
         total: tracks.length,
-        phase: 'fetching',
+        phase: 'fetching-genres',
       })
 
-      // Store for potential retry
-      setPendingTracks(tracks.filter((t) => uncached.includes(t.id)))
-      setPendingClient(client)
+      try {
+        // Extract unique artist IDs from uncached tracks
+        const artistIds = [...new Set(uncachedTracks.map((t) => t.artistId).filter(Boolean))]
 
-      // Fetch in batches
-      const batches: string[][] = []
-      for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
-        batches.push(uncached.slice(i, i + BATCH_SIZE))
-      }
+        // Check artist-genres cache
+        const { cached: cachedGenres, uncached: uncachedArtistIds } =
+          await getCachedArtistGenres(artistIds)
 
-      const fetchedFeatures: AudioFeatures[] = []
-      let failedBatchIndex = -1
+        // Fetch missing artist genres from Spotify
+        if (uncachedArtistIds.length > 0) {
+          const { data: artists, error } = await client.getArtists(uncachedArtistIds)
 
-      for (let i = 0; i < batches.length; i++) {
-        const batch = batches[i]
-
-        const { data, error } = await client.getAudioFeatures(batch)
-
-        if (error || !data) {
-          failedBatchIndex = i
-          setProgress({
-            current: cached.length + fetchedFeatures.length,
-            total: tracks.length,
-            phase: 'error',
-            error: error || 'Failed to fetch audio features',
-            partialSuccess: {
-              completedBatches: i,
-              totalBatches: batches.length,
-              failedBatch: i + 1,
-            },
-          })
-
-          // Cache what we got so far
-          if (fetchedFeatures.length > 0) {
-            await cacheAudioFeatures(fetchedFeatures)
+          if (error) {
+            console.warn('Failed to fetch some artist genres:', error)
           }
 
-          // Return partial data
-          const allFeatures = [...cached, ...fetchedFeatures]
-          setFeatures(allFeatures)
-          setIsCached(false)
-          return allFeatures
+          if (artists && artists.length > 0) {
+            // Cache fetched genres
+            await cacheArtistGenres(
+              artists.map((a) => ({ artistId: a.id, genres: a.genres }))
+            )
+            // Add to local map
+            for (const artist of artists) {
+              cachedGenres.set(artist.id, artist.genres)
+            }
+          }
         }
 
-        fetchedFeatures.push(...data)
-
-        // Update progress
+        // Estimate features
         setProgress({
-          current: cached.length + fetchedFeatures.length,
+          current: cached.length,
           total: tracks.length,
-          phase: 'fetching',
+          phase: 'estimating',
         })
 
-        // Add small delay between batches to avoid rate limiting
-        if (i < batches.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS))
+        // Group tracks by artist for popularity comparison
+        const tracksByArtist = new Map<string, Track[]>()
+        for (const track of tracks) {
+          const existing = tracksByArtist.get(track.artistId) || []
+          existing.push(track)
+          tracksByArtist.set(track.artistId, existing)
         }
+
+        const estimatedFeatures: AudioFeatures[] = uncachedTracks.map((track) => {
+          const genres = cachedGenres.get(track.artistId) || []
+          const artistTracks = tracksByArtist.get(track.artistId)
+          return estimateAudioFeatures(track, genres, artistTracks)
+        })
+
+        // Cache estimated features
+        setProgress({
+          current: cached.length + estimatedFeatures.length,
+          total: tracks.length,
+          phase: 'caching',
+        })
+
+        await cacheAudioFeatures(estimatedFeatures)
+
+        const allFeatures = [...cached, ...estimatedFeatures]
+        const timestamp = await getCacheTimestamp()
+
+        setFeatures(allFeatures)
+        setIsCached(true)
+        setCacheTimestamp(timestamp)
+        setProgress({ current: tracks.length, total: tracks.length, phase: 'done' })
+        setPendingTracks([])
+        setPendingClient(null)
+
+        return allFeatures
+      } catch (err) {
+        console.warn('Feature estimation error:', err)
+
+        // Return whatever we have cached
+        setFeatures(cached)
+        setIsCached(cached.length > 0)
+        setProgress({
+          current: cached.length,
+          total: tracks.length,
+          phase: 'error',
+          error: err instanceof Error ? err.message : 'Failed to analyze your music library',
+        })
+        return cached
       }
-
-      // Cache all fetched features
-      setProgress({
-        current: cached.length + fetchedFeatures.length,
-        total: tracks.length,
-        phase: 'caching',
-      })
-
-      await cacheAudioFeatures(fetchedFeatures)
-
-      const allFeatures = [...cached, ...fetchedFeatures]
-      const timestamp = await getCacheTimestamp()
-
-      setFeatures(allFeatures)
-      setIsCached(true)
-      setCacheTimestamp(timestamp)
-      setProgress({ current: tracks.length, total: tracks.length, phase: 'done' })
-      setPendingTracks([])
-      setPendingClient(null)
-
-      return allFeatures
     },
     []
   )

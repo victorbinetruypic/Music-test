@@ -5,6 +5,8 @@ import type {
   SpotifyAudioFeatures,
   SpotifyPlaylist,
   SpotifyTrack,
+  SpotifyArtist,
+  SpotifyArtistsResponse,
   SpotifyRecommendationsResponse,
   SpotifyRecentlyPlayedResponse,
 } from './types'
@@ -30,6 +32,7 @@ export interface SpotifyClient {
   getAudioFeatures(trackIds: string[]): Promise<{ data: AudioFeatures[] | null; error: string | null }>
   getAudioFeaturesMap(trackIds: string[]): Promise<{ data: Map<string, AudioFeatures> | null; error: string | null }>
   getRecommendations(options: RecommendationOptions): Promise<{ data: Track[] | null; error: string | null }>
+  getArtists(artistIds: string[]): Promise<{ data: SpotifyArtist[] | null; error: string | null }>
   getRecentlyPlayed(limit?: number): Promise<{ data: Array<{ track: Track; playedAt: string }> | null; error: string | null }>
   createPlaylist(name: string, trackUris: string[]): Promise<{ data: SpotifyPlaylist | null; error: string | null }>
 }
@@ -213,6 +216,37 @@ export class RealSpotifyClient implements SpotifyClient {
     return { data: map, error: null }
   }
 
+  async getArtists(
+    artistIds: string[]
+  ): Promise<{ data: SpotifyArtist[] | null; error: string | null }> {
+    if (artistIds.length === 0) {
+      return { data: [], error: null }
+    }
+
+    const allArtists: SpotifyArtist[] = []
+
+    // Spotify limits to 50 IDs per request
+    for (let i = 0; i < artistIds.length; i += 50) {
+      const batch = artistIds.slice(i, i + 50)
+      const { data, error } = await this.fetch<SpotifyArtistsResponse>(
+        `/artists?ids=${batch.join(',')}`
+      )
+
+      if (error || !data) {
+        return { data: allArtists.length > 0 ? allArtists : null, error: error || 'Failed to fetch artists' }
+      }
+
+      allArtists.push(...data.artists.filter((a): a is SpotifyArtist => a !== null))
+
+      // Delay between batches
+      if (i + 50 < artistIds.length) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+      }
+    }
+
+    return { data: allArtists, error: null }
+  }
+
   async getRecommendations(
     options: RecommendationOptions
   ): Promise<{ data: Track[] | null; error: string | null }> {
@@ -314,9 +348,11 @@ function mapSpotifyTrack(track: SpotifyTrack): Track {
     id: track.id,
     name: track.name,
     artist: track.artists.map((a) => a.name).join(', '),
+    artistId: track.artists[0]?.id || '',
     album: track.album.name,
     uri: track.uri,
     durationMs: track.duration_ms,
+    popularity: track.popularity,
   }
 }
 
@@ -355,6 +391,10 @@ export class MockSpotifyClient implements SpotifyClient {
     const map = new Map<string, AudioFeatures>()
     for (const f of features) map.set(f.id, f)
     return { data: map, error: null }
+  }
+
+  async getArtists(): Promise<{ data: SpotifyArtist[] | null; error: string | null }> {
+    return { data: [], error: null }
   }
 
   async getRecommendations(): Promise<{ data: Track[] | null; error: string | null }> {

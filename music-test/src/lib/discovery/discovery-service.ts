@@ -37,8 +37,9 @@ function pickDiverseSeeds(tracks: TrackWithFeatures[], count: number = 5): Track
  * Fetch discovery tracks from Spotify's Recommendations API.
  * Picks diverse seeds, targets the mood's audio profile, and filters out known tracks.
  *
- * Makes exactly 2 API calls: 1x getRecommendations + 1x getAudioFeatures.
- * Both go through the request queue for rate limiting.
+ * Makes 1 API call (getRecommendations). Audio features are estimated via
+ * genre-based heuristics instead of calling the deprecated audio-features API.
+ * Returns empty gracefully if recommendations API returns 403 (deprecated).
  */
 export async function fetchDiscoveryTracks(
   client: SpotifyClient,
@@ -69,18 +70,39 @@ export async function fetchDiscoveryTracks(
   const requestLimit = Math.min(100, count * 3)
 
   // API call 1: Get recommendations
-  const { data: recommendedTracks, error } = await client.getRecommendations({
-    seedTrackIds: seedIds,
-    targetEnergy,
-    targetValence,
-    targetTempo,
-    targetDanceability,
-    maxPopularity,
-    limit: requestLimit,
-  })
+  // Note: Spotify deprecated /recommendations for new apps (Nov 2024).
+  // Catch 403 gracefully — discovery is optional, journey works without it.
+  let recommendedTracks: Awaited<ReturnType<typeof client.getRecommendations>>['data'] = null
+  let error: string | null = null
 
-  if (error || !recommendedTracks || recommendedTracks.length === 0) {
-    return { tracks: [], seeds: seedIds, error: error ?? undefined }
+  try {
+    const result = await client.getRecommendations({
+      seedTrackIds: seedIds,
+      targetEnergy,
+      targetValence,
+      targetTempo,
+      targetDanceability,
+      maxPopularity,
+      limit: requestLimit,
+    })
+    recommendedTracks = result.data
+    error = result.error
+  } catch (err) {
+    console.warn('Recommendations API failed:', err)
+    return { tracks: [], seeds: seedIds, error: 'Recommendations unavailable' }
+  }
+
+  if (error) {
+    // 403 Forbidden = deprecated endpoint, not a transient error
+    if (error.includes('403') || error.includes('Forbidden') || error.includes('forbidden')) {
+      console.warn('Recommendations API returned 403 (deprecated). Returning empty discoveries.')
+      return { tracks: [], seeds: seedIds, error: 'Recommendations API deprecated for this app' }
+    }
+    return { tracks: [], seeds: seedIds, error }
+  }
+
+  if (!recommendedTracks || recommendedTracks.length === 0) {
+    return { tracks: [], seeds: seedIds }
   }
 
   // Filter out excluded tracks
@@ -93,21 +115,14 @@ export async function fetchDiscoveryTracks(
     return { tracks: [], seeds: seedIds }
   }
 
-  // API call 2: Get audio features for discovery tracks
-  const discoveryIds = selected.map((t) => t.id)
-  const { data: featuresMap, error: featuresError } = await client.getAudioFeaturesMap(discoveryIds)
+  // Estimate features for discovery tracks using genre estimation
+  // (audio-features API is deprecated for new apps)
+  const { estimateAudioFeatures } = await import('@/lib/genre/feature-estimator')
 
-  if (!featuresMap) {
-    return { tracks: [], seeds: seedIds, error: featuresError ?? undefined }
-  }
-
-  // Combine into TrackWithFeatures, mark as discovery
-  const tracksWithFeatures: TrackWithFeatures[] = selected
-    .filter((t) => featuresMap.has(t.id))
-    .map((track) => ({
-      track: { ...track, isDiscovery: true },
-      features: featuresMap.get(track.id)!,
-    }))
+  const tracksWithFeatures: TrackWithFeatures[] = selected.map((track) => ({
+    track: { ...track, isDiscovery: true },
+    features: estimateAudioFeatures(track, [], undefined),
+  }))
 
   return { tracks: tracksWithFeatures, seeds: seedIds }
 }

@@ -338,7 +338,7 @@ export function JourneyConfig({
   }, [spotifyClient, currentJourney, setError])
 
   // Loading state — only shown during generation (lazy loading)
-  if (isGenerating && (isLoadingTracks || (featuresProgress && featuresProgress.phase === 'fetching'))) {
+  if (isGenerating && (isLoadingTracks || (featuresProgress && (featuresProgress.phase === 'fetching-genres' || featuresProgress.phase === 'estimating')))) {
     const progressPercent = featuresProgress
       ? (featuresProgress.current / featuresProgress.total) * 100
       : 0
@@ -352,9 +352,11 @@ export function JourneyConfig({
           <div>
             <h2 className="font-bold text-white">Preparing your library</h2>
             <p className="text-sm text-[#a7a7a7]">
-              {featuresProgress
-                ? `Analyzing ${featuresProgress.current} of ${featuresProgress.total} songs`
-                : 'Loading your liked songs...'}
+              {featuresProgress?.phase === 'fetching-genres'
+                ? 'Fetching artist genres...'
+                : featuresProgress?.phase === 'estimating'
+                  ? `Analyzing ${featuresProgress.current} of ${featuresProgress.total} songs`
+                  : 'Loading your liked songs...'}
             </p>
           </div>
         </div>
@@ -380,13 +382,8 @@ export function JourneyConfig({
           <div>
             <h2 className="font-bold text-white">Couldn&apos;t analyze your library</h2>
             <p className="text-sm text-[#a7a7a7]">
-              {featuresProgress.error || 'Failed to load audio features from Spotify.'}
+              {featuresProgress.error || 'Failed to analyze your music library.'}
             </p>
-            {featuresProgress.partialSuccess && (
-              <p className="text-xs text-[#6a6a6a] mt-1">
-                Completed {featuresProgress.partialSuccess.completedBatches} of {featuresProgress.partialSuccess.totalBatches} batches before the error.
-              </p>
-            )}
           </div>
         </div>
         <Button

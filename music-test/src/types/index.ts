@@ -5,9 +5,11 @@ export interface Track {
   id: string
   name: string
   artist: string
+  artistId: string
   album: string
   uri: string
   durationMs: number
+  popularity?: number
   isDiscovery?: boolean
   isForgottenGem?: boolean
 }

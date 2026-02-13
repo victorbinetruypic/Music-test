@@ -3,7 +3,7 @@ import { openDB, type IDBPDatabase } from 'idb'
 import type { AudioFeatures, Track } from '@/types'
 
 const DB_NAME = 'music-test'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 interface MusicTestDB {
   'audio-features': {
@@ -20,6 +20,10 @@ interface MusicTestDB {
     value: JourneyHistoryEntry
     indexes: { 'by-date': string }
   }
+  'artist-genres': {
+    key: string
+    value: ArtistGenresCacheEntry
+  }
 }
 
 export interface AudioFeatureCacheEntry {
@@ -31,6 +35,12 @@ export interface AudioFeatureCacheEntry {
 export interface TrackCacheEntry {
   id: string
   track: Track
+  cachedAt: number
+}
+
+export interface ArtistGenresCacheEntry {
+  artistId: string
+  genres: string[]
   cachedAt: number
 }
 
@@ -64,6 +74,11 @@ function getDB(): Promise<IDBPDatabase<MusicTestDB>> {
         if (!db.objectStoreNames.contains('journey-history')) {
           const historyStore = db.createObjectStore('journey-history', { keyPath: 'id' })
           historyStore.createIndex('by-date', 'completedAt')
+        }
+
+        // Artist genres store
+        if (!db.objectStoreNames.contains('artist-genres')) {
+          db.createObjectStore('artist-genres', { keyPath: 'artistId' })
         }
       },
     })
@@ -189,11 +204,56 @@ export async function clearJourneyHistory(): Promise<void> {
   await db.clear('journey-history')
 }
 
+// Artist Genres Cache
+export async function getCachedArtistGenres(
+  artistIds: string[]
+): Promise<{ cached: Map<string, string[]>; uncached: string[] }> {
+  const db = await getDB()
+  const cached = new Map<string, string[]>()
+  const uncached: string[] = []
+
+  for (const id of artistIds) {
+    const entry = await db.get('artist-genres', id)
+    if (entry) {
+      cached.set(id, entry.genres)
+    } else {
+      uncached.push(id)
+    }
+  }
+
+  return { cached, uncached }
+}
+
+export async function cacheArtistGenres(
+  artists: Array<{ artistId: string; genres: string[] }>
+): Promise<void> {
+  const db = await getDB()
+  const tx = db.transaction('artist-genres', 'readwrite')
+  const now = Date.now()
+
+  await Promise.all([
+    ...artists.map((a) =>
+      tx.store.put({
+        artistId: a.artistId,
+        genres: a.genres,
+        cachedAt: now,
+      })
+    ),
+    tx.done,
+  ])
+}
+
+export async function clearArtistGenresCache(): Promise<void> {
+  const db = await getDB()
+  await db.clear('artist-genres')
+}
+
 // Utility: Clear all caches
 export async function clearAllCaches(): Promise<void> {
   await Promise.all([
     clearAudioFeaturesCache(),
     clearTracksCache(),
     clearJourneyHistory(),
+    clearArtistGenresCache(),
   ])
 }

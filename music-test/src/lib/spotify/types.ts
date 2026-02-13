@@ -35,12 +35,24 @@ export interface SpotifyTrack {
   name: string
   uri: string
   duration_ms: number
+  popularity: number
   artists: Array<{ id: string; name: string }>
   album: {
     id: string
     name: string
     images: Array<{ url: string; height: number; width: number }>
   }
+}
+
+export interface SpotifyArtist {
+  id: string
+  name: string
+  genres: string[]
+  popularity: number
+}
+
+export interface SpotifyArtistsResponse {
+  artists: SpotifyArtist[]
 }
 
 export interface SpotifyAudioFeatures {
