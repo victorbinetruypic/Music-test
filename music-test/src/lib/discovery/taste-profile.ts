@@ -44,7 +44,7 @@ export function buildTasteProfile(
  * For each genre, look up feature estimate and check if energy AND valence
  * ranges overlap with the mood's thresholds.
  * Score = energyOverlap × valenceOverlap.
- * Sort by weighted combination of mood fit (60%) + user taste frequency (40%).
+ * Sort by weighted combination of mood fit (70%) + user taste frequency (30%).
  */
 export function filterGenresForMood(
   genres: Array<{ genre: string; count: number }>,
@@ -66,8 +66,12 @@ export function filterGenresForMood(
     if (energyOverlap <= 0 || valenceOverlap <= 0) continue
 
     const moodFitScore = energyOverlap * valenceOverlap
+
+    // Require minimum mood fit — filters out genres with marginal overlap
+    if (moodFitScore < 0.15) continue
+
     const tasteScore = count / maxCount
-    const combinedScore = moodFitScore * 0.6 + tasteScore * 0.4
+    const combinedScore = moodFitScore * 0.7 + tasteScore * 0.3
 
     scored.push({ genre, count, moodFitScore, combinedScore })
   }
@@ -111,7 +115,9 @@ export function selectSearchGenres(
 
 /**
  * Calculate overlap between two ranges as a 0-1 score.
- * Returns 0 if no overlap, 1 if one range fully contains the other.
+ * Normalizes by the larger range to penalize genres with overly wide feature
+ * ranges (e.g. "classical" energy [0.1, 0.5]) — they get lower scores than
+ * genres that tightly match the mood's thresholds.
  */
 function rangeOverlap(
   a: [number, number],
@@ -123,9 +129,9 @@ function rangeOverlap(
   if (overlapStart >= overlapEnd) return 0
 
   const overlapSize = overlapEnd - overlapStart
-  const smallerRange = Math.min(a[1] - a[0], b[1] - b[0])
+  const largerRange = Math.max(a[1] - a[0], b[1] - b[0])
 
-  if (smallerRange <= 0) return 0
+  if (largerRange <= 0) return 0
 
-  return overlapSize / smallerRange
+  return overlapSize / largerRange
 }

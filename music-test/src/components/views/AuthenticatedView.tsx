@@ -7,6 +7,7 @@ import { JourneyConfig } from '@/components/features/JourneyConfig'
 import { PlaybackView } from '@/components/features/PlaybackView'
 import { useAuthStore } from '@/stores/authStore'
 import { useJourneyStore } from '@/stores/journeyStore'
+import { usePlayerStore } from '@/stores/playerStore'
 import { usePrefsStore } from '@/stores/prefsStore'
 import { useSpotifyClient } from '@/hooks/useSpotifyClient'
 import type { Journey } from '@/types'
@@ -164,6 +165,8 @@ export function AuthenticatedView(): React.ReactElement {
   const handleExitPlayback = (): void => {
     saveInterruptedJourney()
     clearJourney()
+    // Reset player state so next journey shows "Ready to Play" screen
+    usePlayerStore.getState().setPlaybackState('idle')
     setViewState('config')
   }
 
