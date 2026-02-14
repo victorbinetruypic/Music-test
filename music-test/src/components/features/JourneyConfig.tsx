@@ -27,21 +27,6 @@ import type { Track, Journey, Mood, Duration } from '@/types'
 const TRACK_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 const AUTO_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000
 const AUTO_REFRESH_MAX_SAMPLE_TRACKS = 100
-const FALLBACK_GENRES = [
-  'electronic',
-  'house',
-  'techno',
-  'ambient',
-  'classical',
-  'hip hop',
-  'trap',
-  'rock',
-  'metal',
-  'jazz',
-  'pop',
-  'indie',
-]
-
 interface JourneyConfigProps {
   likedSongsCount: number
   onJourneyReady?: (journey: Journey) => void
@@ -92,7 +77,7 @@ export function JourneyConfig({
   const [generationPhase, setGenerationPhase] = useState<string | null>(null)
   const [lastLibraryRefresh, setLastLibraryRefresh] = useState<number | null>(null)
   const [availableGenres, setAvailableGenres] = useState<string[]>([])
-  const [usingFallbackGenres, setUsingFallbackGenres] = useState(false)
+  const [genreWarning, setGenreWarning] = useState<string | null>(null)
   const generatingRef = useRef(false)
 
   // Refresh library handler — clears caches so next generation re-fetches
@@ -134,7 +119,6 @@ export function JourneyConfig({
     const loadGenres = async (): Promise<void> => {
       if (!selectedMood) {
         setAvailableGenres([])
-        setUsingFallbackGenres(false)
         return
       }
 
@@ -143,8 +127,7 @@ export function JourneyConfig({
       if (!isMounted) return
 
       if (artistGenreMap.size === 0) {
-        setAvailableGenres(FALLBACK_GENRES)
-        setUsingFallbackGenres(true)
+        setAvailableGenres([])
         return
       }
 
@@ -155,13 +138,7 @@ export function JourneyConfig({
       )
 
       const topGenres = moodGenres.slice(0, 12).map((g) => g.genre)
-      if (topGenres.length > 0) {
-        setAvailableGenres(topGenres)
-        setUsingFallbackGenres(false)
-      } else {
-        setAvailableGenres(FALLBACK_GENRES)
-        setUsingFallbackGenres(true)
-      }
+      setAvailableGenres(topGenres)
     }
 
     loadGenres()
@@ -307,6 +284,7 @@ export function JourneyConfig({
         current.add(genre)
       }
       setMoodGenres(selectedMood, Array.from(current))
+      setGenreWarning(null)
     },
     [selectedMood, selectedGenres, setMoodGenres]
   )
@@ -314,6 +292,7 @@ export function JourneyConfig({
   const clearGenres = useCallback(() => {
     if (!selectedMood) return
     setMoodGenres(selectedMood, [])
+    setGenreWarning(null)
   }, [selectedMood, setMoodGenres])
 
   // Generate journey
@@ -381,12 +360,15 @@ export function JourneyConfig({
       // Apply optional genre filter (only if it leaves enough tracks)
       let candidateTracks = tracksWithFeatures
       if (selectedGenreSet.size > 0) {
-        const filteredByGenre = tracksWithFeatures.filter((twf) => {
-          const genres = cachedGenres.get(twf.track.artistId) || []
-          return genres.some(matchesSelectedGenre)
-        })
+        if (cachedGenres.size === 0) {
+          setGenreWarning('Genre filtering requires library analysis. Refresh your library to enable it.')
+        } else {
+          const filteredByGenre = tracksWithFeatures.filter((twf) => {
+            const genres = cachedGenres.get(twf.track.artistId) || []
+            return genres.some(matchesSelectedGenre)
+          })
 
-        // Enforce genre selection; fail fast if we don't have enough matches
+          // Enforce genre selection; fail fast if we don't have enough matches
         if (filteredByGenre.length < 10) {
           setError(
             `Only ${filteredByGenre.length} songs match your selected genres. Add more genres or clear the filter.`
@@ -397,7 +379,8 @@ export function JourneyConfig({
           return
         }
 
-        candidateTracks = filteredByGenre
+          candidateTracks = filteredByGenre
+        }
       }
 
       // Compute skip penalties for frequency reduction (Story 4.4)
@@ -715,9 +698,9 @@ export function JourneyConfig({
             )}
           </div>
           {availableGenres.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {availableGenres.map((genre) => {
-                const isSelected = selectedGenres.includes(genre)
+      <div className="flex flex-wrap gap-2">
+        {availableGenres.map((genre) => {
+          const isSelected = selectedGenres.includes(genre)
                 return (
                   <button
                     key={genre}
@@ -732,18 +715,16 @@ export function JourneyConfig({
                   >
                     {formatGenreLabel(genre)}
                   </button>
-                )
-              })}
-            </div>
-          ) : (
+            )
+          })}
+        </div>
+      ) : (
             <p className="text-[11px] text-[#5f5f5f]">
               Genres will appear after your library is analyzed.
             </p>
           )}
-          {usingFallbackGenres && (
-            <p className="text-[11px] text-[#5f5f5f]">
-              Using common genres until your library finishes analysis.
-            </p>
+          {genreWarning && (
+            <p className="text-[11px] text-[#f0b429]">{genreWarning}</p>
           )}
         </div>
       )}
