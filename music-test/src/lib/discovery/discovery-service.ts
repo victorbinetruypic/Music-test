@@ -16,6 +16,7 @@ export interface DiscoveryOptions {
   count: number
   excludeTrackIds: Set<string>
   maxPopularity?: number
+  preferredGenres?: string[]
 }
 
 export interface DiscoveryResult {
@@ -40,30 +41,40 @@ export async function fetchDiscoveryTracks(
   client: SpotifyClient,
   options: DiscoveryOptions
 ): Promise<DiscoveryResult> {
-  const { mood, count, excludeTrackIds, maxPopularity = 70 } = options
+  const { mood, count, excludeTrackIds, maxPopularity = 70, preferredGenres } = options
 
   try {
-    // Step 1: Get artist genres from IndexedDB
-    const artistGenreMap = await getAllCachedArtistGenres()
-    if (artistGenreMap.size === 0) {
-      return { tracks: [], seeds: [], error: 'No artist genre data cached yet' }
-    }
+    const normalizedPreferred = (preferredGenres ?? [])
+      .map((genre) => genre.toLowerCase().trim())
+      .filter(Boolean)
 
-    // Step 2: Build taste profile
-    const tasteProfile = buildTasteProfile(artistGenreMap)
-    if (tasteProfile.rankedGenres.length === 0) {
-      return { tracks: [], seeds: [] }
-    }
+    let searchGenres: string[] = []
 
-    // Step 3: Filter genres by mood
-    const thresholds = getMoodThresholds(mood)
-    const moodGenres = filterGenresForMood(tasteProfile.rankedGenres, thresholds)
-    if (moodGenres.length === 0) {
-      return { tracks: [], seeds: [], error: 'No genres match this mood in your taste profile' }
-    }
+    if (normalizedPreferred.length > 0) {
+      searchGenres = Array.from(new Set(normalizedPreferred)).slice(0, 4)
+    } else {
+      // Step 1: Get artist genres from IndexedDB
+      const artistGenreMap = await getAllCachedArtistGenres()
+      if (artistGenreMap.size === 0) {
+        return { tracks: [], seeds: [], error: 'No artist genre data cached yet' }
+      }
 
-    // Step 4: Select top genres to search
-    const searchGenres = selectSearchGenres(moodGenres, 4)
+      // Step 2: Build taste profile
+      const tasteProfile = buildTasteProfile(artistGenreMap)
+      if (tasteProfile.rankedGenres.length === 0) {
+        return { tracks: [], seeds: [] }
+      }
+
+      // Step 3: Filter genres by mood
+      const thresholds = getMoodThresholds(mood)
+      const moodGenres = filterGenresForMood(tasteProfile.rankedGenres, thresholds)
+      if (moodGenres.length === 0) {
+        return { tracks: [], seeds: [], error: 'No genres match this mood in your taste profile' }
+      }
+
+      // Step 4: Select top genres to search
+      searchGenres = selectSearchGenres(moodGenres, 4)
+    }
 
     // Step 5: Search for tracks in each genre (with caching)
     const allCandidates: Array<{ track: Track; sourceGenre: string }> = []

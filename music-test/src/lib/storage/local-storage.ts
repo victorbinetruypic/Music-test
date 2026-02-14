@@ -68,6 +68,7 @@ export interface UserPreferences {
   lastMood: Mood | null
   lastDuration: Duration | null
   volume: number
+  moodGenres: Partial<Record<Mood, string[]>>
   updatedAt: string
 }
 
@@ -75,6 +76,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   lastMood: null,
   lastDuration: null,
   volume: 50,
+  moodGenres: {},
   updatedAt: new Date().toISOString(),
 }
 

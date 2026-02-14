@@ -25,6 +25,7 @@ interface PrefsStore {
   lastMood: Mood | null
   lastDuration: Duration | null
   volume: number
+  moodGenres: Partial<Record<Mood, string[]>>
   skipData: SkipEntry[]
   lastJourney: LastJourneySummary | null
   discoveryHistory: DiscoveryEntry[]
@@ -38,6 +39,7 @@ interface PrefsStore {
   setLastMood: (mood: Mood) => void
   setLastDuration: (duration: Duration) => void
   setVolume: (volume: number) => void
+  setMoodGenres: (mood: Mood, genres: string[]) => void
   recordSkip: (entry: Omit<SkipEntry, 'timestamp'>) => void
   getSkipCountForTrack: (trackId: string) => number
   saveCompletedJourney: (summary: LastJourneySummary) => void
@@ -49,6 +51,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   lastMood: null,
   lastDuration: null,
   volume: 50,
+  moodGenres: {},
   skipData: [],
   lastJourney: null,
   discoveryHistory: [],
@@ -66,6 +69,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
       lastMood: prefs.lastMood,
       lastDuration: prefs.lastDuration,
       volume: prefs.volume,
+      moodGenres: prefs.moodGenres ?? {},
       skipData,
       lastJourney,
       discoveryHistory,
@@ -108,6 +112,13 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
     const clampedVolume = Math.max(0, Math.min(100, volume))
     savePreferences({ volume: clampedVolume })
     set({ volume: clampedVolume })
+  },
+
+  setMoodGenres: (mood, genres) => {
+    const current = get().moodGenres
+    const updated = { ...current, [mood]: genres }
+    savePreferences({ moodGenres: updated })
+    set({ moodGenres: updated })
   },
 
   recordSkip: (entry) => {

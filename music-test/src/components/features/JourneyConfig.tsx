@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { MoodPicker } from './MoodPicker'
 import { DurationPicker } from './DurationPicker'
 import { ArcPreview } from './ArcVisualization'
+import { cn } from '@/lib/utils'
 import { useJourneyStore } from '@/stores/journeyStore'
 import { usePrefsStore, calculatePenaltyScore } from '@/stores/prefsStore'
 import { useSpotifyClient } from '@/hooks/useSpotifyClient'
@@ -19,6 +20,8 @@ import {
 } from '@/lib/journey'
 import { fetchDiscoveryTracks } from '@/lib/discovery/discovery-service'
 import { findForgottenGems } from '@/lib/discovery/forgotten-gems'
+import { buildTasteProfile, filterGenresForMood } from '@/lib/discovery/taste-profile'
+import { getMoodThresholds } from '@/lib/journey/matcher'
 import type { Track, Journey, Mood, Duration } from '@/types'
 
 const TRACK_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
@@ -56,6 +59,8 @@ export function JourneyConfig({
   const lastDuration = usePrefsStore((s) => s.lastDuration)
   const setLastMood = usePrefsStore((s) => s.setLastMood)
   const setLastDuration = usePrefsStore((s) => s.setLastDuration)
+  const moodGenres = usePrefsStore((s) => s.moodGenres)
+  const setMoodGenres = usePrefsStore((s) => s.setMoodGenres)
   const loadPrefsFromStorage = usePrefsStore((s) => s.loadFromStorage)
   const prefsLoaded = usePrefsStore((s) => s.isLoaded)
 
@@ -72,6 +77,7 @@ export function JourneyConfig({
   const [savedPlaylistUrl, setSavedPlaylistUrl] = useState<string | null>(null)
   const [generationPhase, setGenerationPhase] = useState<string | null>(null)
   const [lastLibraryRefresh, setLastLibraryRefresh] = useState<number | null>(null)
+  const [availableGenres, setAvailableGenres] = useState<string[]>([])
   const generatingRef = useRef(false)
 
   // Refresh library handler — clears caches so next generation re-fetches
@@ -103,6 +109,41 @@ export function JourneyConfig({
       isMounted = false
     }
   }, [])
+
+  // Load available genres for the selected mood
+  useEffect(() => {
+    let isMounted = true
+
+    const loadGenres = async (): Promise<void> => {
+      if (!selectedMood) {
+        setAvailableGenres([])
+        return
+      }
+
+      const { getAllCachedArtistGenres } = await import('@/lib/storage')
+      const artistGenreMap = await getAllCachedArtistGenres()
+      if (!isMounted) return
+
+      if (artistGenreMap.size === 0) {
+        setAvailableGenres([])
+        return
+      }
+
+      const tasteProfile = buildTasteProfile(artistGenreMap)
+      const moodGenres = filterGenresForMood(
+        tasteProfile.rankedGenres,
+        getMoodThresholds(selectedMood)
+      )
+
+      setAvailableGenres(moodGenres.slice(0, 12).map((g) => g.genre))
+    }
+
+    loadGenres()
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedMood, lastLibraryRefresh])
 
   // Set defaults from last session
   useEffect(() => {
@@ -212,6 +253,27 @@ export function JourneyConfig({
     setLastDuration(duration)
   }
 
+  const selectedGenres = selectedMood ? moodGenres[selectedMood] ?? [] : []
+
+  const toggleGenre = useCallback(
+    (genre: string) => {
+      if (!selectedMood) return
+      const current = new Set(selectedGenres)
+      if (current.has(genre)) {
+        current.delete(genre)
+      } else {
+        current.add(genre)
+      }
+      setMoodGenres(selectedMood, Array.from(current))
+    },
+    [selectedMood, selectedGenres, setMoodGenres]
+  )
+
+  const clearGenres = useCallback(() => {
+    if (!selectedMood) return
+    setMoodGenres(selectedMood, [])
+  }, [selectedMood, setMoodGenres])
+
   // Generate journey
   const handleGenerate = useCallback(async (): Promise<void> => {
     if (!selectedMood || !selectedDuration || !spotifyClient) {
@@ -269,6 +331,25 @@ export function JourneyConfig({
       const featuresMap = createFeaturesMap(cachedFeatures)
       const tracksWithFeatures = combineTracksWithFeatures(currentTracks, featuresMap)
 
+      // Estimate track count for pacing and filtering
+      const avgSongDuration = 3.5
+      const durationMinutes = selectedDuration === 'open-ended' ? 180 : selectedDuration
+      const estimatedTracks = Math.max(10, Math.round(durationMinutes / avgSongDuration))
+
+      // Apply optional genre filter (only if it leaves enough tracks)
+      const selectedGenreSet = new Set(selectedGenres.map((g) => g.toLowerCase()))
+      let candidateTracks = tracksWithFeatures
+      if (selectedGenreSet.size > 0) {
+        const filteredByGenre = tracksWithFeatures.filter((twf) => {
+          const genres = cachedGenres.get(twf.track.artistId) || []
+          return genres.some((genre) => selectedGenreSet.has(genre.toLowerCase()))
+        })
+        const minPool = Math.max(30, estimatedTracks * 2)
+        if (filteredByGenre.length >= minPool) {
+          candidateTracks = filteredByGenre
+        }
+      }
+
       // Compute skip penalties for frequency reduction (Story 4.4)
       const skipPenalties = new Map<string, number>()
       const trackIds = new Set(currentTracks.map((t) => t.id))
@@ -280,9 +361,6 @@ export function JourneyConfig({
       }
 
       // Calculate how many discoveries to fetch
-      const avgSongDuration = 3.5
-      const durationMinutes = selectedDuration === 'open-ended' ? 180 : selectedDuration
-      const estimatedTracks = Math.max(10, Math.round(durationMinutes / avgSongDuration))
       const discoveryCount = Math.max(2, Math.floor(estimatedTracks * 0.2))
 
       // Reduce repeats: exclude tracks from the most recent journey if pool allows
@@ -345,10 +423,15 @@ export function JourneyConfig({
         featuresMap,
         count: 2,
       })
-      const filteredGems = gems.filter((g) => !recentExclusions.has(g.track.id))
+      const filteredGems = gems.filter((g) => {
+        if (recentExclusions.has(g.track.id)) return false
+        if (selectedGenreSet.size === 0) return true
+        const genres = cachedGenres.get(g.track.artistId) || []
+        return genres.some((genre) => selectedGenreSet.has(genre.toLowerCase()))
+      })
 
       // Use mood-filtered tracks as seeds for better recommendations
-      const moodMatchedTracks = filterTracksByMood(tracksWithFeatures, selectedMood)
+      const moodMatchedTracks = filterTracksByMood(candidateTracks, selectedMood)
 
       // Fetch discovery tracks (failure is non-fatal — journey works without them)
       const { tracks: discoveryTracks, error: discoveryError } = await fetchDiscoveryTracks(
@@ -358,6 +441,7 @@ export function JourneyConfig({
           mood: selectedMood,
           count: discoveryCount,
           excludeTrackIds: excludeIds,
+          preferredGenres: selectedGenres,
         }
       )
       if (discoveryError) {
@@ -369,7 +453,7 @@ export function JourneyConfig({
       // Generate journey with discoveries and gems
       const generatorExclusions = new Set<string>([...exclusions, ...recentExclusions])
       const result = generateJourney({
-        tracks: tracksWithFeatures,
+        tracks: candidateTracks,
         mood: selectedMood,
         duration: selectedDuration,
         excludedTrackIds: generatorExclusions,
@@ -391,7 +475,7 @@ export function JourneyConfig({
       setIsGenerating(false)
       setGenerationPhase(null)
     }
-  }, [selectedMood, selectedDuration, featuresProgress, tracks, exclusions, skipData, discoveryHistory, spotifyClient, setIsGenerating, setError, setJourney, onJourneyReady, loadTracksAndFeatures])
+  }, [selectedMood, selectedDuration, selectedGenres, featuresProgress, tracks, exclusions, skipData, discoveryHistory, spotifyClient, setIsGenerating, setError, setJourney, onJourneyReady, loadTracksAndFeatures])
 
   // Save playlist to Spotify
   const handleSavePlaylist = useCallback(async (): Promise<void> => {
@@ -566,6 +650,49 @@ export function JourneyConfig({
         disabled={isGenerating}
       />
 
+      {selectedMood && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-[#a7a7a7]">Optional: narrow by genre</p>
+            {selectedGenres.length > 0 && (
+              <button
+                type="button"
+                onClick={clearGenres}
+                className="text-[11px] text-[#6a6a6a] hover:text-[#a7a7a7] transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {availableGenres.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {availableGenres.map((genre) => {
+                const isSelected = selectedGenres.includes(genre)
+                return (
+                  <button
+                    key={genre}
+                    type="button"
+                    onClick={() => toggleGenre(genre)}
+                    className={cn(
+                      'rounded-full px-3 py-1 text-xs transition-colors',
+                      isSelected
+                        ? 'bg-[#1DB954] text-black'
+                        : 'bg-[#202020] text-[#cfcfcf] hover:bg-[#2a2a2a]'
+                    )}
+                  >
+                    {formatGenreLabel(genre)}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-[11px] text-[#5f5f5f]">
+              Genres will appear after your library is analyzed.
+            </p>
+          )}
+        </div>
+      )}
+
       <DurationPicker
         value={selectedDuration}
         onChange={handleDurationChange}
@@ -629,6 +756,13 @@ function formatLastRefresh(timestamp: number | null): string {
 function formatLastRefreshTooltip(timestamp: number | null): string {
   if (!timestamp) return 'No refresh recorded yet'
   return new Date(timestamp).toLocaleString()
+}
+
+function formatGenreLabel(genre: string): string {
+  return genre
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
 }
 
 function CheckIcon({ className }: { className?: string }): React.ReactElement {
