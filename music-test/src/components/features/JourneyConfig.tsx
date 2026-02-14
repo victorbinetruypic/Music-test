@@ -71,6 +71,7 @@ export function JourneyConfig({
   const [isSavingPlaylist, setIsSavingPlaylist] = useState(false)
   const [savedPlaylistUrl, setSavedPlaylistUrl] = useState<string | null>(null)
   const [generationPhase, setGenerationPhase] = useState<string | null>(null)
+  const [lastLibraryRefresh, setLastLibraryRefresh] = useState<number | null>(null)
   const generatingRef = useRef(false)
 
   // Refresh library handler — clears caches so next generation re-fetches
@@ -87,6 +88,21 @@ export function JourneyConfig({
       loadPrefsFromStorage()
     }
   }, [prefsLoaded, loadPrefsFromStorage])
+
+  // Load last refresh timestamp on mount
+  useEffect(() => {
+    let isMounted = true
+    const loadRefreshTimestamp = async (): Promise<void> => {
+      const { getLibraryRefreshTimestamp } = await import('@/lib/storage')
+      if (isMounted) {
+        setLastLibraryRefresh(getLibraryRefreshTimestamp())
+      }
+    }
+    loadRefreshTimestamp()
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   // Set defaults from last session
   useEffect(() => {
@@ -138,7 +154,9 @@ export function JourneyConfig({
       const pagesToFetch = Math.min(totalPages, Math.ceil(maxSampleTracks / limit))
 
       if (options?.markRefresh) {
-        setLibraryRefreshTimestamp(Date.now())
+        const refreshTimestamp = Date.now()
+        setLibraryRefreshTimestamp(refreshTimestamp)
+        setLastLibraryRefresh(refreshTimestamp)
       }
 
       // Pick random page offsets spread across the library
@@ -537,6 +555,7 @@ export function JourneyConfig({
 
   // Configuration UI
   const canGenerate = selectedMood && selectedDuration
+  const lastRefreshLabel = formatLastRefresh(lastLibraryRefresh)
 
   return (
     <div className="space-y-6">
@@ -587,8 +606,23 @@ export function JourneyConfig({
       >
         Refresh library
       </button>
+      <p className="text-[11px] text-center text-[#5f5f5f]">
+        Last refresh: {lastRefreshLabel}
+      </p>
     </div>
   )
+}
+
+function formatLastRefresh(timestamp: number | null): string {
+  if (!timestamp) return 'Never'
+  const diffMs = Date.now() - timestamp
+  if (diffMs < 60 * 1000) return 'Just now'
+  const minutes = Math.floor(diffMs / (60 * 1000))
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
 }
 
 function CheckIcon({ className }: { className?: string }): React.ReactElement {

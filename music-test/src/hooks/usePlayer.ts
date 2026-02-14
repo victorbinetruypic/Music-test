@@ -97,6 +97,7 @@ export function usePlayer() {
 
   const journeyTracksRef = useRef<string[]>([])
   const mountedRef = useRef(true)
+  const playbackStartTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Crossfade (delegated to dedicated hook)
   const { isCrossfadeEnabled, crossfadeStatus, toggleCrossfade } = useCrossfade(playerServiceInstance)
@@ -194,6 +195,10 @@ export function usePlayer() {
       }
 
       setPlaybackState('loading')
+      if (playbackStartTimeoutRef.current) {
+        clearTimeout(playbackStartTimeoutRef.current)
+        playbackStartTimeoutRef.current = null
+      }
       const uris = currentJourney.tracks.map((t) => t.uri)
       journeyTracksRef.current = uris
 
@@ -206,6 +211,13 @@ export function usePlayer() {
         setPlaybackState('error')
       } else {
         setCurrentTrackIndex(startIndex)
+        // If SDK state doesn't arrive promptly, fall back to showing controls
+        playbackStartTimeoutRef.current = setTimeout(() => {
+          if (!mountedRef.current) return
+          if (usePlayerStore.getState().playbackState === 'loading') {
+            setPlaybackState('playing')
+          }
+        }, 1500)
       }
     },
     [currentJourney, setCurrentTrackIndex, setPlaybackState, setError]
@@ -327,6 +339,10 @@ export function usePlayer() {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      if (playbackStartTimeoutRef.current) {
+        clearTimeout(playbackStartTimeoutRef.current)
+        playbackStartTimeoutRef.current = null
+      }
     }
   }, [])
 
