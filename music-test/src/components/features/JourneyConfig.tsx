@@ -556,6 +556,7 @@ export function JourneyConfig({
   // Configuration UI
   const canGenerate = selectedMood && selectedDuration
   const lastRefreshLabel = formatLastRefresh(lastLibraryRefresh)
+  const lastRefreshTooltip = formatLastRefreshTooltip(lastLibraryRefresh)
 
   return (
     <div className="space-y-6">
@@ -607,7 +608,7 @@ export function JourneyConfig({
         Refresh library
       </button>
       <p className="text-[11px] text-center text-[#5f5f5f]">
-        Last refresh: {lastRefreshLabel}
+        <span title={lastRefreshTooltip}>Last refresh: {lastRefreshLabel}</span>
       </p>
     </div>
   )
@@ -623,6 +624,11 @@ function formatLastRefresh(timestamp: number | null): string {
   if (hours < 24) return `${hours}h ago`
   const days = Math.floor(hours / 24)
   return `${days}d ago`
+}
+
+function formatLastRefreshTooltip(timestamp: number | null): string {
+  if (!timestamp) return 'No refresh recorded yet'
+  return new Date(timestamp).toLocaleString()
 }
 
 function CheckIcon({ className }: { className?: string }): React.ReactElement {
