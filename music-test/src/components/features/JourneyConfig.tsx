@@ -385,10 +385,19 @@ export function JourneyConfig({
           const genres = cachedGenres.get(twf.track.artistId) || []
           return genres.some(matchesSelectedGenre)
         })
-        const minPool = Math.max(30, estimatedTracks * 2)
-        if (filteredByGenre.length >= minPool) {
-          candidateTracks = filteredByGenre
+
+        // Enforce genre selection; fail fast if we don't have enough matches
+        if (filteredByGenre.length < 10) {
+          setError(
+            `Only ${filteredByGenre.length} songs match your selected genres. Add more genres or clear the filter.`
+          )
+          setIsGenerating(false)
+          setGenerationPhase(null)
+          generatingRef.current = false
+          return
         }
+
+        candidateTracks = filteredByGenre
       }
 
       // Compute skip penalties for frequency reduction (Story 4.4)
