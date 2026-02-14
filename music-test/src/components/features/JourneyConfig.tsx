@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { MoodPicker } from './MoodPicker'
@@ -125,6 +125,8 @@ export function JourneyConfig({
     }
   }, [])
 
+  const genreRefreshKey = `${selectedMood ?? 'none'}|${lastLibraryRefresh ?? 0}|${featuresProgress?.phase ?? 'idle'}`
+
   // Load available genres for the selected mood
   useEffect(() => {
     let isMounted = true
@@ -167,7 +169,7 @@ export function JourneyConfig({
     return () => {
       isMounted = false
     }
-  }, [selectedMood, lastLibraryRefresh, featuresProgress?.phase])
+  }, [genreRefreshKey])
 
   // Set defaults from last session
   useEffect(() => {
@@ -278,6 +280,22 @@ export function JourneyConfig({
   }
 
   const selectedGenres = selectedMood ? moodGenres[selectedMood] ?? [] : []
+  const selectedGenreSet = useMemo(
+    () => new Set(selectedGenres.map((g) => g.toLowerCase())),
+    [selectedGenres]
+  )
+  const matchesSelectedGenre = useCallback(
+    (genre: string) => {
+      const normalized = genre.toLowerCase()
+      for (const selected of selectedGenreSet) {
+        if (normalized === selected) return true
+        if (normalized.includes(selected)) return true
+        if (selected.includes(normalized)) return true
+      }
+      return false
+    },
+    [selectedGenreSet]
+  )
 
   const toggleGenre = useCallback(
     (genre: string) => {
@@ -361,12 +379,11 @@ export function JourneyConfig({
       const estimatedTracks = Math.max(10, Math.round(durationMinutes / avgSongDuration))
 
       // Apply optional genre filter (only if it leaves enough tracks)
-      const selectedGenreSet = new Set(selectedGenres.map((g) => g.toLowerCase()))
       let candidateTracks = tracksWithFeatures
       if (selectedGenreSet.size > 0) {
         const filteredByGenre = tracksWithFeatures.filter((twf) => {
           const genres = cachedGenres.get(twf.track.artistId) || []
-          return genres.some((genre) => selectedGenreSet.has(genre.toLowerCase()))
+          return genres.some(matchesSelectedGenre)
         })
         const minPool = Math.max(30, estimatedTracks * 2)
         if (filteredByGenre.length >= minPool) {
@@ -451,7 +468,7 @@ export function JourneyConfig({
         if (recentExclusions.has(g.track.id)) return false
         if (selectedGenreSet.size === 0) return true
         const genres = cachedGenres.get(g.track.artistId) || []
-        return genres.some((genre) => selectedGenreSet.has(genre.toLowerCase()))
+        return genres.some(matchesSelectedGenre)
       })
 
       // Use mood-filtered tracks as seeds for better recommendations
