@@ -134,7 +134,7 @@ export function ArcVisualizationCompact({
 
   return (
     <div className={cn('space-y-1', className)}>
-      <div className="relative h-2 rounded-full overflow-hidden bg-muted/30">
+      <div className="relative h-2.5 rounded-full overflow-hidden bg-white/10">
         <div className="absolute inset-0 flex">
           {journey.phases.map((phase, index) => {
             const trackCount = phase.endIndex - phase.startIndex + 1
@@ -142,7 +142,7 @@ export function ArcVisualizationCompact({
             return (
               <div
                 key={`${phase.phase}-${index}`}
-                className={cn(PHASE_COLORS[phase.phase], 'opacity-40')}
+                className={cn(PHASE_COLORS[phase.phase], 'opacity-50')}
                 style={{ width: `${percentage}%` }}
               />
             )
@@ -150,11 +150,19 @@ export function ArcVisualizationCompact({
         </div>
         {/* Progress overlay */}
         <div
-          className="absolute inset-y-0 left-0 bg-primary transition-all duration-300"
+          className="absolute inset-y-0 left-0 bg-[#1DB954] transition-all duration-300"
           style={{ width: `${progress}%` }}
         />
       </div>
-      <div className="flex justify-between text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#9a9a9a]">
+        {journey.phases.map((phase, index) => (
+          <div key={`legend-${phase.phase}-${index}`} className="flex items-center gap-1">
+            <div className={cn('h-2 w-2 rounded-full', PHASE_COLORS[phase.phase])} />
+            <span>{PHASE_LABELS[phase.phase]}</span>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between text-xs text-[#8a8a8a]">
         <span>Track {currentTrackIndex + 1} of {totalTracks}</span>
         <span>{Math.round(progress)}%</span>
       </div>

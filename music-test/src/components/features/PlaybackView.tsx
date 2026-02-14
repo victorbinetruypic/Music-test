@@ -334,7 +334,7 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
             max={duration || 100}
             step={1000}
             onValueChange={([value]) => handleSeek(value)}
-            className="w-full"
+            className="w-full [&_[data-slot=slider-track]]:bg-white/20 [&_[data-slot=slider-range]]:bg-[#1DB954] [&_[data-slot=slider-thumb]]:bg-white [&_[data-slot=slider-thumb]]:border-[#1DB954]"
           />
           <div className="flex justify-between text-xs text-[#a7a7a7]">
             <span>{formatTime(seekingPosition ?? currentPosition)}</span>
@@ -348,12 +348,12 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
             variant="ghost"
             size="icon"
             onClick={togglePlayback}
-            className="h-16 w-16 rounded-full bg-white hover:bg-[#f0f0f0] hover:scale-105 transition-transform"
+            className="h-16 w-16 rounded-full bg-white text-black shadow-sm hover:bg-[#1DB954] hover:shadow-[0_0_0_6px_rgba(29,185,84,0.25)] hover:scale-105 transition-[transform,box-shadow,background-color]"
           >
             {playbackState === 'playing' ? (
-              <PauseIcon className="h-8 w-8 text-black" />
+              <PauseIcon className="h-8 w-8 text-current" />
             ) : (
-              <PlayIcon className="h-8 w-8 text-black" />
+              <PlayIcon className="h-8 w-8 text-current" />
             )}
           </Button>
           <Button
@@ -387,7 +387,7 @@ export function PlaybackView({ onExit, onComplete }: PlaybackViewProps): React.R
             max={100}
             step={1}
             onValueChange={([value]) => changeVolume(value)}
-            className="flex-1"
+            className="flex-1 [&_[data-slot=slider-track]]:bg-white/15 [&_[data-slot=slider-range]]:bg-[#1DB954] [&_[data-slot=slider-thumb]]:bg-white [&_[data-slot=slider-thumb]]:border-[#1DB954]"
           />
         </div>
       </div>
