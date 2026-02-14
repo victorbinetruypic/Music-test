@@ -27,6 +27,20 @@ import type { Track, Journey, Mood, Duration } from '@/types'
 const TRACK_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 const AUTO_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000
 const AUTO_REFRESH_MAX_SAMPLE_TRACKS = 100
+const FALLBACK_GENRES = [
+  'electronic',
+  'house',
+  'techno',
+  'ambient',
+  'classical',
+  'hip hop',
+  'trap',
+  'rock',
+  'metal',
+  'jazz',
+  'pop',
+  'indie',
+]
 
 interface JourneyConfigProps {
   likedSongsCount: number
@@ -78,6 +92,7 @@ export function JourneyConfig({
   const [generationPhase, setGenerationPhase] = useState<string | null>(null)
   const [lastLibraryRefresh, setLastLibraryRefresh] = useState<number | null>(null)
   const [availableGenres, setAvailableGenres] = useState<string[]>([])
+  const [usingFallbackGenres, setUsingFallbackGenres] = useState(false)
   const generatingRef = useRef(false)
 
   // Refresh library handler — clears caches so next generation re-fetches
@@ -117,6 +132,7 @@ export function JourneyConfig({
     const loadGenres = async (): Promise<void> => {
       if (!selectedMood) {
         setAvailableGenres([])
+        setUsingFallbackGenres(false)
         return
       }
 
@@ -125,7 +141,8 @@ export function JourneyConfig({
       if (!isMounted) return
 
       if (artistGenreMap.size === 0) {
-        setAvailableGenres([])
+        setAvailableGenres(FALLBACK_GENRES)
+        setUsingFallbackGenres(true)
         return
       }
 
@@ -135,7 +152,14 @@ export function JourneyConfig({
         getMoodThresholds(selectedMood)
       )
 
-      setAvailableGenres(moodGenres.slice(0, 12).map((g) => g.genre))
+      const topGenres = moodGenres.slice(0, 12).map((g) => g.genre)
+      if (topGenres.length > 0) {
+        setAvailableGenres(topGenres)
+        setUsingFallbackGenres(false)
+      } else {
+        setAvailableGenres(FALLBACK_GENRES)
+        setUsingFallbackGenres(true)
+      }
     }
 
     loadGenres()
@@ -143,7 +167,7 @@ export function JourneyConfig({
     return () => {
       isMounted = false
     }
-  }, [selectedMood, lastLibraryRefresh])
+  }, [selectedMood, lastLibraryRefresh, featuresProgress?.phase])
 
   // Set defaults from last session
   useEffect(() => {
@@ -688,6 +712,11 @@ export function JourneyConfig({
           ) : (
             <p className="text-[11px] text-[#5f5f5f]">
               Genres will appear after your library is analyzed.
+            </p>
+          )}
+          {usingFallbackGenres && (
+            <p className="text-[11px] text-[#5f5f5f]">
+              Using common genres until your library finishes analysis.
             </p>
           )}
         </div>
